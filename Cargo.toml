@@ -1,7 +1,9 @@
 [package]
-name = "BlazePK"
+name = "blaze-pk"
 version = "0.1.0"
 edition = "2021"
+description = "Rust library for blaze packet system"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
