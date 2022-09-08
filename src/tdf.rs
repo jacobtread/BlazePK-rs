@@ -7,6 +7,7 @@ use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use crate::error::TdfError;
 use crate::io::{BytePeek, Readable, ReadWrite, TdfResult, TypedReadable, Writable};
 
+#[derive(Clone)]
 pub struct Tdf(String, TdfType);
 
 impl Tdf {
@@ -21,6 +22,8 @@ impl Tdf {
     const PAIR_TYPE: u8 = 0x8;
     const TRIPLE_TYPE: u8 = 0x9;
     const FLOAT_TYPE: u8 = 0xA;
+
+    const OPTIONAL_NO_VALUE: u8 = 0x7F;
 
     /// Convert string label into u32 encoded tag
     pub fn label_to_tag(label: &String) -> u32 {
@@ -122,6 +125,7 @@ impl Readable for Tdf {
     }
 }
 
+#[derive(Clone)]
 pub struct VarInt(pub u64);
 
 impl From<VarInt> for u64 {
@@ -174,6 +178,7 @@ impl Writable for VarInt {
     }
 }
 
+#[derive(Clone)]
 pub enum TdfType {
     VarInt { value: VarInt },
     String { value: String },
@@ -248,13 +253,63 @@ impl TypedReadable for TdfType {
             }
             Tdf::LIST_TYPE => {
                 let sub_type = input.read_u8()?;
-                let length = VarInt::read(input).0 as usize;
+                let length = VarInt::read(input)?.0 as usize;
                 let mut values = Vec::with_capacity(length);
                 for _ in 0..length {
                     let value = TdfType::read(sub_type, input)?;
                     values.push(value)
                 }
                 Ok(TdfType::List { l_type: sub_type, values })
+            }
+            Tdf::MAP_TYPE => {
+                let key_type = input.read_u8()?;
+                let value_type = input.read_u8()?;
+                let length = VarInt::read(input)?.0 as usize;
+
+                let mut keys = Vec::with_capacity(length);
+                let mut values = Vec::with_capacity(length);
+
+                for _ in 0..length {
+                    let key = TdfType::read(key_type, input)?;
+                    keys.push(key);
+
+                    let value = TdfType::read(value_type, input)?;
+                    values.push(value);
+                }
+
+                Ok(TdfType::Map { key_type, value_type, keys, values })
+            }
+            Tdf::OPTIONAL_TYPE => {
+                let value_type = input.read_u8()?;
+                let value = if value_type != Tdf::OPTIONAL_NO_VALUE {
+                    Some(Box::new(Tdf::read(input)?))
+                } else {
+                    None
+                };
+                Ok(TdfType::Optional { value_type, value })
+            }
+            Tdf::INT_LIST_TYPE => {
+                let length = VarInt::read(input)?.0 as usize;
+                let mut values = Vec::with_capacity(length);
+                for _ in 0..length {
+                    values.push(VarInt::read(input)?);
+                }
+                Ok(TdfType::VarIntList { values })
+            }
+            Tdf::PAIR_TYPE => {
+                let a = VarInt::read(input)?;
+                let b = VarInt::read(input)?;
+                Ok(TdfType::Pair { a, b })
+            }
+            Tdf::TRIPLE_TYPE => {
+                let a = VarInt::read(input)?;
+                let b = VarInt::read(input)?;
+                let c = VarInt::read(input)?;
+                Ok(TdfType::Triple { a, b, c })
+            }
+            Tdf::FLOAT_TYPE => {
+                let value = input.read_f32::<BE>()?;
+                Ok(TdfType::Float { value })
             }
             rtype => Err(TdfError::UnknownType(rtype))
         }
