@@ -1,11 +1,7 @@
-use std::io::{BufReader, Cursor, SeekFrom, Write};
-use std::io::{Read};
-use std::iter::Peekable;
-use std::ops::Deref;
-use std::ptr::slice_from_raw_parts;
+use std::io::{Read, Write};
 use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use crate::error::TdfError;
-use crate::io::{BytePeek, Readable, ReadWrite, TdfResult, TypedReadable, Writable};
+use crate::io::{BytePeek, Readable, TdfResult, TypedReadable, Writable};
 
 #[derive(Clone)]
 pub struct Tdf(String, TdfType);
