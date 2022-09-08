@@ -1,4 +1,4 @@
-use std::io::{Bytes, Chain, IoSliceMut, Read, Take, Write};
+use std::io::{Read, Write};
 use byteorder::ReadBytesExt;
 use crate::error::TdfError;
 
@@ -66,6 +66,7 @@ impl<R: Read> Read for BytePeek<R> {
                         let value = inner_bytes[i - 1];
                         buf[i] = value;
                     }
+                    read_count += inner_read_count
                 }
                 Ok(read_count)
             } else {

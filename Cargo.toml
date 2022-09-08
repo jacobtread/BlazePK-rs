@@ -9,3 +9,4 @@ license = "MIT"
 
 [dependencies]
 byteorder = "1.4.3"
+linked-hash-map = "0.5.6"

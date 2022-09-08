@@ -1,9 +1,11 @@
+use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use byteorder::{BE, ReadBytesExt, WriteBytesExt};
+use linked_hash_map::LinkedHashMap;
 use crate::error::TdfError;
 use crate::io::{BytePeek, Readable, TdfResult, TypedReadable, Writable};
 
-#[derive(Clone)]
+#[derive(Clone, Hash)]
 pub struct Tdf(pub String, pub TdfType);
 
 impl Tdf {
@@ -56,7 +58,7 @@ impl Tdf {
 
         output[2] |= (input[2] & 0x03) << 6;
         output[2] |= (input[3] & 0x40) >> 1;
-        output[2] |= (input[3] & 0x1F);
+        output[2] |= input[3] & 0x1F;
 
         let mut tag: u32 = 0;
         tag |= (output[0] << 24) as u32;
@@ -69,22 +71,22 @@ impl Tdf {
     pub fn tag_to_label(input: &[u8; 3]) -> String {
         let mut output: [u8; 4] = [0, 0, 0, 0];
 
-        output[0] |= ((input[0] & 0x80) >> 1);
-        output[0] |= ((input[0] & 0x40) >> 2);
-        output[0] |= ((input[0] & 0x30) >> 2);
-        output[0] |= ((input[0] & 0x0C) >> 2);
+        output[0] |= (input[0] & 0x80) >> 1;
+        output[0] |= (input[0] & 0x40) >> 2;
+        output[0] |= (input[0] & 0x30) >> 2;
+        output[0] |= (input[0] & 0x0C) >> 2;
 
-        output[1] |= ((input[0] & 0x02) << 5);
-        output[1] |= ((input[0] & 0x01) << 4);
-        output[1] |= ((input[1] & 0xF0) >> 4);
+        output[1] |= (input[0] & 0x02) << 5;
+        output[1] |= (input[0] & 0x01) << 4;
+        output[1] |= (input[1] & 0xF0) >> 4;
 
-        output[2] |= ((input[1] & 0x08) << 3);
-        output[2] |= ((input[1] & 0x04) << 2);
-        output[2] |= ((input[1] & 0x03) << 2);
-        output[2] |= ((input[2] & 0xC0) >> 6);
+        output[2] |= (input[1] & 0x08) << 3;
+        output[2] |= (input[1] & 0x04) << 2;
+        output[2] |= (input[1] & 0x03) << 2;
+        output[2] |= (input[2] & 0xC0) >> 6;
 
-        output[3] |= ((input[2] & 0x20) << 1);
-        output[3] |= (input[2] & 0x1F);
+        output[3] |= (input[2] & 0x20) << 1;
+        output[3] |= input[2] & 0x1F;
 
         let mut out = String::with_capacity(4);
 
@@ -125,7 +127,7 @@ impl Readable for Tdf {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Hash)]
 pub struct VarInt(pub u64);
 
 impl From<VarInt> for u64 {
@@ -148,7 +150,7 @@ impl Readable for VarInt {
         let mut byte: u8;
         loop {
             byte = input.read_u8()?;
-            result |= (((byte & 127) as u64) << shift);
+            result |= ((byte & 127) as u64) << shift;
             shift += 7;
             if byte < 128 {
                 break;
@@ -184,13 +186,31 @@ pub enum TdfType {
     String(String),
     Blob(Vec<u8>),
     Group { start2: bool, values: Vec<Tdf> },
-    List { l_type: u8, values: Vec<TdfType> },
-    Map { key_type: u8, value_type: u8, keys: Vec<TdfType>, values: Vec<TdfType> },
+    List { value_type: u8, values: Vec<TdfType> },
+    Map { key_type: u8, value_type: u8, value: LinkedHashMap<TdfType, TdfType> },
     Optional { value_type: u8, value: Option<Box<Tdf>> },
     VarIntList(Vec<VarInt>),
     Pair(VarInt, VarInt),
     Triple(VarInt, VarInt, VarInt),
     Float(f32),
+}
+
+impl Hash for TdfType {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            TdfType::VarInt(value) => { value.hash(state)}
+            TdfType::String(value) => {value.hash(state)}
+            TdfType::Blob(value) => {value.hash(state)}
+            TdfType::Group { .. } => state.write_u8(0),
+            TdfType::List { .. } => state.write_u8(0),
+            TdfType::Map { .. } => state.write_u8(0),
+            TdfType::Optional { .. } => state.write_u8(0),
+            TdfType::VarIntList(_) => state.write_u8(0),
+            TdfType::Pair(_, _) => state.write_u8(0),
+            TdfType::Triple(_,_,_) => state.write_u8(0),
+            TdfType::Float(_) => state.write_u8(0),
+        }
+    }
 }
 
 impl From<&TdfType> for u8 {
@@ -259,25 +279,21 @@ impl TypedReadable for TdfType {
                     let value = TdfType::read(sub_type, input)?;
                     values.push(value)
                 }
-                Ok(TdfType::List { l_type: sub_type, values })
+                Ok(TdfType::List { value_type: sub_type, values })
             }
             Tdf::MAP_TYPE => {
                 let key_type = input.read_u8()?;
                 let value_type = input.read_u8()?;
                 let length = VarInt::read(input)?.0 as usize;
 
-                let mut keys = Vec::with_capacity(length);
-                let mut values = Vec::with_capacity(length);
-
+                let mut values = LinkedHashMap::with_capacity(length);
                 for _ in 0..length {
                     let key = TdfType::read(key_type, input)?;
-                    keys.push(key);
-
                     let value = TdfType::read(value_type, input)?;
-                    values.push(value);
+                    values.insert(key, value);
                 }
 
-                Ok(TdfType::Map { key_type, value_type, keys, values })
+                Ok(TdfType::Map { key_type, value_type, value: values })
             }
             Tdf::OPTIONAL_TYPE => {
                 let value_type = input.read_u8()?;
@@ -340,27 +356,23 @@ impl Writable for TdfType {
                 }
                 out.write_u8(0)?;
             }
-            TdfType::List { l_type, values } => {
-                out.write_u8(*l_type)?;
+            TdfType::List { value_type, values } => {
+                out.write_u8(*value_type)?;
                 for value in values {
                     value.write(out)?;
                 }
             }
-            TdfType::Map { key_type, value_type, keys, values } => {
+            TdfType::Map { key_type, value_type, value } => {
                 out.write_u8(*key_type)?;
                 out.write_u8(*value_type)?;
 
-                let length = keys.len();
+                let length = value.len();
 
                 VarInt(length as u64).write(out)?;
 
-                for i in 0..length {
-                    let key = keys.get(i)
-                        .ok_or(TdfError::InvalidMapSize)?;
-                    let value = values.get(i)
-                        .ok_or(TdfError::InvalidMapSize)?;
-                    key.write(out)?;
-                    value.write(out)?;
+                for entry in value {
+                    entry.0.write(out)?;
+                    entry.1.write(out)?;
                 }
             }
             TdfType::Optional { value_type, value } => {
@@ -393,24 +405,33 @@ impl Writable for TdfType {
     }
 }
 
-macro_rules! from_to_tdf {
-    ($ty:ty, $expr:expr) => {
-        impl From<$ty> for TdfType {
-            fn from(value: $ty) -> Self {
-                $expr
+impl PartialEq<Self> for TdfType {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            TdfType::String(str1) => {
+                if let TdfType::String(str2) = other {
+                    str1 == str2
+                } else {
+                    false
+                }
             }
+            TdfType::VarInt(value1) => {
+                if let TdfType::VarInt(value2) = other {
+                    value1 == value2
+                } else {
+                    false
+                }
+            }
+            _ => false
         }
-    };
+    }
 }
+
+impl Eq for TdfType {}
 
 macro_rules! from_to_var_int {
     ($($ty:ty),*) => {
         $(
-         impl From<$ty> for TdfType {
-            fn from(value: $ty) -> Self {
-                TdfType::VarInt(VarInt(value as u64))
-            }
-         }
 
         impl Into<TdfType> for $ty {
              fn into(self) -> TdfType {
@@ -422,10 +443,6 @@ macro_rules! from_to_var_int {
 }
 
 from_to_var_int![u8,u16,u32,u64,i8,i16,i32,i64,usize];
-
-struct TdfBuilder {
-    values: Vec<Tdf>,
-}
 
 impl Into<TdfType> for String {
     fn into(self) -> TdfType {
@@ -442,23 +459,5 @@ impl Into<TdfType> for &str {
 impl Into<TdfType> for f32 {
     fn into(self) -> TdfType {
         TdfType::Float(self)
-    }
-}
-
-impl From<String> for TdfType {
-    fn from(value: String) -> Self {
-        TdfType::String(value)
-    }
-}
-
-impl From<&str> for TdfType {
-    fn from(value: &str) -> Self {
-        TdfType::String(value.to_string())
-    }
-}
-
-impl From<f32> for TdfType {
-    fn from(value: f32) -> Self {
-        TdfType::Float(value)
     }
 }
