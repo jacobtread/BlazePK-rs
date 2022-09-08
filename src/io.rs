@@ -1,8 +1,8 @@
-use std::fmt::Write;
 use std::fs::read;
-use std::io::{Empty, Read};
+use std::io::{Empty, Read, Write};
 use byteorder::ReadBytesExt;
 use crate::error::{EmptyTdfResult, TdfResult};
+use crate::tdf::TdfValueType;
 
 /// Trait for something that can be written to the provided output
 pub trait Writable: Send + Sync {
@@ -13,7 +13,7 @@ pub trait Writable: Send + Sync {
 /// Trait for something that can be read from the input
 pub trait Readable: Send + Sync {
     /// Function for reading self from the input
-    fn read<R: Read>(input: &mut R) -> TdfResult<Self>
+    fn read<R: Read>(input: &mut TdfRead<R>) -> TdfResult<Self>
         where Self: Sized;
 }
 
@@ -21,19 +21,19 @@ pub trait Readable: Send + Sync {
 /// provided type value
 pub trait TypedReadable: Send + Sync {
     /// Function for reading self from the input
-    fn read<R: Read>(rtype: u8, input: &mut R) -> TdfResult<Self>
+    fn read<R: Read>(rtype: &TdfValueType, input: &mut TdfRead<R>) -> TdfResult<Self>
         where Self: Sized;
 }
 
 /// Struct which wraps buffer providing functions to read ahead
 /// and look at the next byte without consuming it.
-pub struct WrappedBuffer<R> {
+pub struct TdfRead<R> {
     inner: R,
     peeked: Option<u8>,
     reverted: bool,
 }
 
-impl<R: Read> WrappedBuffer<R> {
+impl<R: Read> TdfRead<R> {
     pub fn new(value: R) -> Self {
         Self {
             inner: value,
@@ -68,7 +68,7 @@ impl<R: Read> WrappedBuffer<R> {
     }
 }
 
-impl<R: Read> Read for WrappedBuffer<R> {
+impl<R: Read> Read for TdfRead<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.reverted {
             if let Some(peeked) = self.peeked {
@@ -93,7 +93,7 @@ impl<R: Read> Read for WrappedBuffer<R> {
                     // Increase the read count by the amount read
                     read_count += inner_read_count;
                 }
-                Ok(read_count)
+                return Ok(read_count)
             }
         }
 
