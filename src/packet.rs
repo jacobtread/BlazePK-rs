@@ -25,7 +25,7 @@ impl Readable for Packet {
         } else {
             0
         };
-        let content_length = length + (ext_length << 16);
+        let content_length: u32 = (length as u32 + ((ext_length as u32) << 16));
         let bytes = &mut Vec::with_capacity(content_length as usize);
         input.read_exact(bytes)?;
         let mut reader = Cursor::new(bytes);

@@ -61,9 +61,9 @@ impl Tdf {
         output[2] |= input[3] & 0x1F;
 
         let mut tag: u32 = 0;
-        tag |= (output[0] << 24) as u32;
-        tag |= (output[1] << 16) as u32;
-        tag |= (output[2] << 8) as u32;
+        tag |= ((output[0] as u32) << 24) as u32;
+        tag |= ((output[1] as u32) << 16) as u32;
+        tag |= ((output[2] as u32) << 8) as u32;
         tag
     }
 
