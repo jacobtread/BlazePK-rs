@@ -1,29 +1,39 @@
 use std::fmt::{Display, Formatter};
 use std::io;
 
+pub type TdfResult<T> = Result<T, TdfError>;
+pub type EmptyTdfResult = TdfResult<()>;
+
+/// Enum for errors that occur while reading or writing Tdf's
 #[derive(Debug)]
 pub enum TdfError {
+    // IO Errors
     IOError(io::Error),
+    // Map key and values lengths don't match (can't encode)
     InvalidMapSize,
-    UnknownType(u8)
+    // Unknown tdf type value
+    UnknownType(u8),
 }
 
+/// Implement display for all the tdf error values
+impl Display for TdfError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TdfError::IOError(err) =>
+                f.write_str(&format!("IO Error: {}", err)),
+            TdfError::InvalidMapSize =>
+                f.write_str("Map key and value lengths don't match"),
+            TdfError::UnknownType(ty) =>
+                f.write_str(&format!("Unknown Tdf type {}", ty))
+        }
+    }
+}
+
+/// Implement from io::Error for converting to TdfError when using ?
+/// operator to simplify code
 impl From<io::Error> for TdfError {
     fn from(err: io::Error) -> Self {
         TdfError::IOError(err)
     }
 }
 
-impl Display for TdfError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TdfError::IOError(_) => { f.write_str("io error")?; }
-            TdfError::InvalidMapSize => { f.write_str("map key and value lengths didn't match")?; }
-            TdfError::UnknownType(ty) => {
-                f.write_str("Unknown tdf type value")?;
-                f.write_str(ty.to_string().as_str())?;
-            }
-        }
-        Ok(())
-    }
-}

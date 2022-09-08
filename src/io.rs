@@ -1,79 +1,103 @@
-use std::io::{Read, Write};
+use std::fmt::Write;
+use std::fs::read;
+use std::io::{Empty, Read};
 use byteorder::ReadBytesExt;
-use crate::error::TdfError;
+use crate::error::{EmptyTdfResult, TdfResult};
 
-pub type TdfResult<T> = Result<T, TdfError>;
-
+/// Trait for something that can be written to the provided output
 pub trait Writable: Send + Sync {
-    fn write<W: Write>(&self, out: &mut W) -> TdfResult<()>;
+    /// Function which handles writing self to the out
+    fn write<W: Write>(&self, out: &mut W) -> EmptyTdfResult;
 }
 
+/// Trait for something that can be read from the input
 pub trait Readable: Send + Sync {
-    fn read<R: Read>(input: &mut R) -> TdfResult<Self> where Self: Sized;
+    /// Function for reading self from the input
+    fn read<R: Read>(input: &mut R) -> TdfResult<Self>
+        where Self: Sized;
 }
 
+/// Trait for something that can be read from the input using its
+/// provided type value
 pub trait TypedReadable: Send + Sync {
-    fn read<R: Read>(rtype: u8, input: &mut R) -> TdfResult<Self> where Self: Sized;
+    /// Function for reading self from the input
+    fn read<R: Read>(rtype: u8, input: &mut R) -> TdfResult<Self>
+        where Self: Sized;
 }
 
-pub trait ReadWrite: Writable + Readable + Sized {}
-
-
-pub struct BytePeek<R: Read> {
+/// Struct which wraps buffer providing functions to read ahead
+/// and look at the next byte without consuming it.
+pub struct WrappedBuffer<R> {
     inner: R,
     peeked: Option<u8>,
-    revert: bool,
+    reverted: bool,
 }
 
-impl<R: Read> BytePeek<R> {
+impl<R: Read> WrappedBuffer<R> {
     pub fn new(value: R) -> Self {
         Self {
             inner: value,
             peeked: None,
-            revert: false,
+            reverted: false,
         }
     }
 
+    /// Function for obtaining the next byte and setting the peek state
     pub fn peek(&mut self) -> std::io::Result<u8> {
+        self.reverted = false;
         let value = self.inner.read_u8()?;
         self.peeked = Some(value.clone());
         Ok(value)
     }
 
+    /// Function for telling the next read operation to read the peeked value
     pub fn revert_peek(&mut self) {
-        self.revert = true
+        self.reverted = true;
+    }
+
+    pub fn get_ref(&self) -> &R {
+        &self.inner
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
+
+    pub fn into_inner(self) -> R {
+        self.inner
     }
 }
 
-impl<R: Read> Read for BytePeek<R> {
+impl<R: Read> Read for WrappedBuffer<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if !self.revert {
-            return self.inner.read(buf);
-        }
-        if let Some(peeked) = self.peeked {
-            let len = buf.len();
-            if len > 0 {
+        if self.reverted {
+            if let Some(peeked) = self.peeked {
+                let buf_len = buf.len();
+                // Ignore buffers that have no length
+                if buf_len < 1 {
+                    return Ok(0);
+                }
                 let mut read_count = 1;
+                // Set the first item in the buffer to the peeked value
                 buf[0] = peeked;
-                self.peeked = None;
-                if len > 1 {
-                    let mut inner_bytes = Vec::with_capacity(len);
-                    let inner_read_count = self.inner.read(&mut inner_bytes)?;
-                    for i in 1..len {
-                        if i > inner_read_count {
-                            break;
-                        }
-                        let value = inner_bytes[i - 1];
-                        buf[i] = value;
+
+                // If the buffer still has more capacity
+                if buf_len > 1 {
+                    // Read the remaining length from the inner buffer
+                    let mut byte_buff = Vec::with_capacity(buf_len - 1);
+                    let inner_read_count = self.inner.read(&mut byte_buff)?;
+                    for i in 0..inner_read_count {
+                        let value = byte_buff[i];
+                        buf[i + 1] = value
                     }
-                    read_count += inner_read_count
+                    // Increase the read count by the amount read
+                    read_count += inner_read_count;
                 }
                 Ok(read_count)
-            } else {
-                Ok(0)
             }
-        } else {
-            self.inner.read(buf)
         }
+
+        // Finally just read from the inner
+        return self.inner.read(buf);
     }
 }
