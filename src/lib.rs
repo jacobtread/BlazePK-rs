@@ -2,6 +2,8 @@ pub mod packet;
 pub mod tdf;
 pub mod error;
 pub mod io;
+pub mod types;
+
 
 use std::collections::HashMap;
 use std::os::raw::c_ushort;

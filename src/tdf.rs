@@ -4,7 +4,7 @@ use crate::error::TdfError;
 use crate::io::{BytePeek, Readable, TdfResult, TypedReadable, Writable};
 
 #[derive(Clone)]
-pub struct Tdf(String, TdfType);
+pub struct Tdf(pub String, pub TdfType);
 
 impl Tdf {
     const VAR_INT_TYPE: u8 = 0x0;
@@ -20,6 +20,10 @@ impl Tdf {
     const FLOAT_TYPE: u8 = 0xA;
 
     const OPTIONAL_NO_VALUE: u8 = 0x7F;
+
+    pub fn new(label: &str, value: impl Into<TdfType>) -> Self {
+        Self(label.to_string(), value.into())
+    }
 
     /// Convert string label into u32 encoded tag
     pub fn label_to_tag(label: &String) -> u32 {
@@ -176,17 +180,17 @@ impl Writable for VarInt {
 
 #[derive(Clone)]
 pub enum TdfType {
-    VarInt { value: VarInt },
-    String { value: String },
-    Blob { value: Vec<u8> },
+    VarInt(VarInt),
+    String(String),
+    Blob(Vec<u8>),
     Group { start2: bool, values: Vec<Tdf> },
     List { l_type: u8, values: Vec<TdfType> },
     Map { key_type: u8, value_type: u8, keys: Vec<TdfType>, values: Vec<TdfType> },
     Optional { value_type: u8, value: Option<Box<Tdf>> },
-    VarIntList { values: Vec<VarInt> },
-    Pair { a: VarInt, b: VarInt },
-    Triple { a: VarInt, b: VarInt, c: VarInt },
-    Float { value: f32 },
+    VarIntList(Vec<VarInt>),
+    Pair(VarInt, VarInt),
+    Triple(VarInt, VarInt, VarInt),
+    Float(f32),
 }
 
 impl From<&TdfType> for u8 {
@@ -212,7 +216,7 @@ impl TypedReadable for TdfType {
         match rtype {
             Tdf::VAR_INT_TYPE => {
                 let value = VarInt::read(input)?;
-                Ok(TdfType::VarInt { value })
+                Ok(TdfType::VarInt(value))
             }
             Tdf::STRING_TYPE => {
                 let length = VarInt::read(input)?.0 as usize;
@@ -220,13 +224,13 @@ impl TypedReadable for TdfType {
                 input.read_exact(&mut bytes)?;
                 let value = String::from_utf8_lossy(&bytes)
                     .to_string();
-                Ok(TdfType::String { value })
+                Ok(TdfType::String(value))
             }
             Tdf::BLOB_TYPE => {
                 let length = VarInt::read(input)?.0 as usize;
                 let mut bytes = Vec::with_capacity(length);
                 input.read_exact(&mut bytes)?;
-                Ok(TdfType::Blob { value: bytes })
+                Ok(TdfType::Blob(bytes))
             }
             Tdf::GROUP_TYPE => {
                 let mut values = Vec::new();
@@ -240,7 +244,7 @@ impl TypedReadable for TdfType {
                     } else if peeked == 2 {
                         start2 = true
                     } else {
-                        read.unpeek();
+                        read.revert_peek();
                         let value = Tdf::read(&mut read)?;
                         values.push(value)
                     }
@@ -290,22 +294,22 @@ impl TypedReadable for TdfType {
                 for _ in 0..length {
                     values.push(VarInt::read(input)?);
                 }
-                Ok(TdfType::VarIntList { values })
+                Ok(TdfType::VarIntList(values))
             }
             Tdf::PAIR_TYPE => {
                 let a = VarInt::read(input)?;
                 let b = VarInt::read(input)?;
-                Ok(TdfType::Pair { a, b })
+                Ok(TdfType::Pair(a, b))
             }
             Tdf::TRIPLE_TYPE => {
                 let a = VarInt::read(input)?;
                 let b = VarInt::read(input)?;
                 let c = VarInt::read(input)?;
-                Ok(TdfType::Triple { a, b, c })
+                Ok(TdfType::Triple(a, b, c))
             }
             Tdf::FLOAT_TYPE => {
                 let value = input.read_f32::<BE>()?;
-                Ok(TdfType::Float { value })
+                Ok(TdfType::Float(value))
             }
             rtype => Err(TdfError::UnknownType(rtype))
         }
@@ -315,15 +319,15 @@ impl TypedReadable for TdfType {
 impl Writable for TdfType {
     fn write<W: Write>(&self, out: &mut W) -> TdfResult<()> {
         match self {
-            TdfType::VarInt { value } => {
+            TdfType::VarInt(value) => {
                 value.write(out)?
             }
-            TdfType::String { value } => {
+            TdfType::String(value) => {
                 let bytes = value.clone().into_bytes();
                 VarInt(bytes.len() as u64).write(out)?;
                 out.write(bytes.as_ref())?;
             }
-            TdfType::Blob { value } => {
+            TdfType::Blob(value) => {
                 VarInt(value.len() as u64).write(out)?;
                 out.write(value.as_ref())?;
             }
@@ -365,26 +369,96 @@ impl Writable for TdfType {
                     value.write(out)?;
                 }
             }
-            TdfType::VarIntList { values } => {
+            TdfType::VarIntList(values) => {
                 let length = values.len();
                 VarInt(length as u64).write(out)?;
                 for value in values {
                     value.write(out)?;
                 }
             }
-            TdfType::Pair { a, b } => {
+            TdfType::Pair(a, b) => {
                 a.write(out)?;
                 b.write(out)?;
             }
-            TdfType::Triple { a, b, c } => {
+            TdfType::Triple(a, b, c) => {
                 a.write(out)?;
                 b.write(out)?;
                 c.write(out)?;
             }
-            TdfType::Float { value } => {
+            TdfType::Float(value) => {
                 out.write_f32::<BE>(*value)?;
             }
         }
         Ok(())
+    }
+}
+
+macro_rules! from_to_tdf {
+    ($ty:ty, $expr:expr) => {
+        impl From<$ty> for TdfType {
+            fn from(value: $ty) -> Self {
+                $expr
+            }
+        }
+    };
+}
+
+macro_rules! from_to_var_int {
+    ($($ty:ty),*) => {
+        $(
+         impl From<$ty> for TdfType {
+            fn from(value: $ty) -> Self {
+                TdfType::VarInt(VarInt(value as u64))
+            }
+         }
+
+        impl Into<TdfType> for $ty {
+             fn into(self) -> TdfType {
+                 TdfType::VarInt(VarInt(self as u64))
+             }
+         }
+        )*
+    };
+}
+
+from_to_var_int![u8,u16,u32,u64,i8,i16,i32,i64,usize];
+
+struct TdfBuilder {
+    values: Vec<Tdf>,
+}
+
+impl Into<TdfType> for String {
+    fn into(self) -> TdfType {
+        TdfType::String(self)
+    }
+}
+
+impl Into<TdfType> for &str {
+    fn into(self) -> TdfType {
+        TdfType::String(self.to_string())
+    }
+}
+
+impl Into<TdfType> for f32 {
+    fn into(self) -> TdfType {
+        TdfType::Float(self)
+    }
+}
+
+impl From<String> for TdfType {
+    fn from(value: String) -> Self {
+        TdfType::String(value)
+    }
+}
+
+impl From<&str> for TdfType {
+    fn from(value: &str) -> Self {
+        TdfType::String(value.to_string())
+    }
+}
+
+impl From<f32> for TdfType {
+    fn from(value: f32) -> Self {
+        TdfType::Float(value)
     }
 }

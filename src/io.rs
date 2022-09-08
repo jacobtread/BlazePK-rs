@@ -22,7 +22,7 @@ pub trait ReadWrite: Writable + Readable + Sized {}
 pub struct BytePeek<R: Read> {
     inner: R,
     peeked: Option<u8>,
-    unpeek: bool,
+    revert: bool,
 }
 
 impl<R: Read> BytePeek<R> {
@@ -30,7 +30,7 @@ impl<R: Read> BytePeek<R> {
         Self {
             inner: value,
             peeked: None,
-            unpeek: false,
+            revert: false,
         }
     }
 
@@ -40,14 +40,14 @@ impl<R: Read> BytePeek<R> {
         Ok(value)
     }
 
-    pub fn unpeek(&mut self) {
-        self.unpeek = true
+    pub fn revert_peek(&mut self) {
+        self.revert = true
     }
 }
 
 impl<R: Read> Read for BytePeek<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if !self.unpeek {
+        if !self.revert {
             return self.inner.read(buf);
         }
         if let Some(peeked) = self.peeked {
