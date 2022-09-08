@@ -9,4 +9,3 @@ license = "MIT"
 
 [dependencies]
 byteorder = "1.4.3"
-serde = { version = "1.0", features = ["derive"] }
