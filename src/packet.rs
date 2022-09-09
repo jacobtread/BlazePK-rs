@@ -4,13 +4,89 @@ use crate::error::{EmptyTdfResult, TdfResult};
 use crate::io::{Readable, TdfRead, Writable};
 use crate::tdf::Tdf;
 
+
+pub enum PacketDirection {
+    Request,
+    Response,
+    Notify,
+    Error,
+    Unknown(u16),
+}
+
+impl Into<u16> for &PacketDirection {
+    fn into(self) -> u16 {
+        match self {
+            PacketDirection::Request => 0x0000,
+            PacketDirection::Response => 0x1000,
+            PacketDirection::Notify => 0x2000,
+            PacketDirection::Error => 0x3000,
+            PacketDirection::Unknown(value) => *value
+        }
+    }
+}
+
+impl From<u16> for PacketDirection {
+    fn from(value: u16) -> Self {
+        match value {
+            0x0000 => PacketDirection::Request,
+            0x1000 => PacketDirection::Response,
+            0x2000 => PacketDirection::Notify,
+            0x3000 => PacketDirection::Error,
+            value => PacketDirection::Unknown(value)
+        }
+    }
+}
+
 pub struct Packet {
     pub component: u16,
     pub command: u16,
     pub error: u16,
-    pub qtype: u16,
+    pub dir: PacketDirection,
     pub id: u16,
     pub contents: Vec<Tdf>,
+}
+
+impl Packet {
+    pub fn push(&mut self, value: Tdf) {
+        self.contents.push(value);
+    }
+
+    pub fn set_contents(&mut self, value: Vec<Tdf>) {
+        self.contents = value;
+    }
+
+    pub fn response(packet: &DecodedPacket, contents: Vec<Tdf>) -> Self {
+        Self {
+            component: packet.component,
+            command: packet.command,
+            error: 0,
+            dir: PacketDirection::Response,
+            id: packet.id,
+            contents,
+        }
+    }
+
+    pub fn error(packet: &DecodedPacket, error: u16, contents: Vec<Tdf>) -> Self {
+        Self {
+            component: packet.component,
+            command: packet.command,
+            error,
+            dir: PacketDirection::Response,
+            id: packet.id,
+            contents,
+        }
+    }
+
+    pub fn notify(component: u16, command: u16, contents: Vec<Tdf>) -> Self {
+        Self {
+            component,
+            command,
+            error: 0,
+            dir: PacketDirection::Notify,
+            id: 0,
+            contents,
+        }
+    }
 }
 
 pub struct DecodedPacket {
@@ -20,6 +96,10 @@ pub struct DecodedPacket {
     pub qtype: u16,
     pub id: u16,
     pub contents: Vec<u8>,
+}
+
+impl DecodedPacket {
+    pub fn decode<T>(&self) {}
 }
 
 
@@ -36,7 +116,7 @@ impl Readable for DecodedPacket {
         } else {
             0
         };
-        let content_length: u32 = (length as u32 + ((ext_length as u32) << 16));
+        let content_length: u32 = length as u32 + ((ext_length as u32) << 16);
         let mut bytes = Vec::with_capacity(content_length as usize);
         input.read_exact(&mut bytes)?;
 
@@ -65,7 +145,8 @@ impl Writable for Packet {
         out.write_u16::<BE>(self.component)?;
         out.write_u16::<BE>(self.command)?;
         out.write_u16::<BE>(self.error)?;
-        out.write_u8((self.qtype << 8) as u8)?;
+        let dir_value: u16 = (&self.dir).into();
+        out.write_u8((dir_value << 8) as u8)?;
         if is_extended {
             out.write_u8(0x10)?;
         } else {

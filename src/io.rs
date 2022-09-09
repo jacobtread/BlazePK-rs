@@ -1,5 +1,4 @@
-use std::fs::read;
-use std::io::{Empty, Read, Write};
+use std::io::{Read, Write};
 use byteorder::ReadBytesExt;
 use crate::error::{EmptyTdfResult, TdfResult};
 use crate::tdf::TdfValueType;
