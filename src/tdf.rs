@@ -6,6 +6,7 @@ use crate::error::{EmptyTdfResult, TdfError, TdfResult};
 use crate::io::{Readable, TdfRead, TypedReadable, Writable};
 use crate::types::{read_byte_array, read_var_int, TdfGroup, TdfList, TdfMap, TdfOptional, VarIntList, VarIntPair, VarIntTriple, write_byte_array, write_var_int};
 
+#[derive(Clone)]
 pub struct Tdf {
     pub name: String,
     pub value: TdfValue,
@@ -13,9 +14,9 @@ pub struct Tdf {
 
 impl Tdf {
     /// Function for creating new Tdf value
-    pub fn new(name: String, value: TdfValue) -> Self {
+    pub fn new(name: &str, value: TdfValue) -> Self {
         Self {
-            name,
+            name: name.to_string(),
             value,
         }
     }
@@ -126,6 +127,7 @@ impl Writable for Tdf {
 
 /// Enum for the different types of Tdf values
 #[repr(u8)]
+#[derive(Clone)]
 pub enum TdfValueType {
     VarInt = 0x0,
     String = 0x1,
@@ -201,7 +203,7 @@ impl TdfValueType {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Clone,PartialEq)]
 pub enum TdfValue {
     VarInt(u64),
     String(String),
@@ -214,6 +216,12 @@ pub enum TdfValue {
     Pair(VarIntPair),
     Triple(VarIntTriple),
     Float(f32),
+}
+
+impl TdfValue {
+    fn tag(self, tag: &str) -> Tdf {
+        Tdf::new(tag.to_string(), self)
+    }
 }
 
 impl Hash for TdfValue {
@@ -403,4 +411,19 @@ impl TypedReadable for TdfValue {
             }
         }
     }
+}
+
+impl TdfLookup for Vec<Tdf> {
+    fn get_by_tag(&self, tag: &String) -> Option<Tdf> {
+        for tdf in self {
+            if tdf.name.eq(tag) {
+                return Some(tdf.clone());
+            }
+        }
+        None
+    }
+}
+
+trait TdfLookup {
+    fn get_by_tag(&self, tag: &String) -> Option<Tdf>;
 }

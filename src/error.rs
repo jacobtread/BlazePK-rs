@@ -13,6 +13,7 @@ pub enum TdfError {
     InvalidMapSize,
     // Unknown tdf type value
     UnknownType(u8),
+    DeserializeError,
 }
 
 /// Implement display for all the tdf error values
@@ -24,7 +25,9 @@ impl Display for TdfError {
             TdfError::InvalidMapSize =>
                 f.write_str("Map key and value lengths don't match"),
             TdfError::UnknownType(ty) =>
-                f.write_str(&format!("Unknown Tdf type {}", ty))
+                f.write_str(&format!("Unknown Tdf type {}", ty)),
+            TdfError::DeserializeError =>
+                f.write_str("Failed to deserialize")
         }
     }
 }

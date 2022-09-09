@@ -24,6 +24,7 @@ pub type VarIntList = Vec<u64>;
 
 /// Represents a group of tdf values that can
 /// possibly start with a 2
+#[derive(Clone)]
 pub struct TdfGroup {
     pub start2: bool,
     pub values: Vec<Tdf>,
@@ -36,6 +37,7 @@ impl PartialEq for TdfGroup {
 }
 
 // Represents a list of
+#[derive(Clone)]
 pub struct TdfList {
     pub value_type: TdfValueType,
     pub values: Vec<TdfValue>,
@@ -50,7 +52,7 @@ impl PartialEq for TdfList {
 
 /// Represents a mapping of tdf value keys to tdf value
 /// values
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct TdfMap {
     pub key_type: TdfValueType,
     pub value_type: TdfValueType,
@@ -59,6 +61,7 @@ pub struct TdfMap {
 
 /// Represents a value that may be present
 /// or not depending on value_type
+#[derive(Clone)]
 pub struct TdfOptional {
     pub value_type: u8,
     pub value: Option<Box<Tdf>>,

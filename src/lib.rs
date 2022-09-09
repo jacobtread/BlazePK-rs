@@ -1,7 +1,7 @@
 extern crate core;
 
-use crate::error::TdfResult;
-use crate::tdf::Tdf;
+use crate::error::{TdfResult,TdfError};
+use crate::tdf::{Tdf, TdfValue};
 use blaze_pk_derive::TdfStruct;
 
 pub mod tdf;
@@ -16,7 +16,7 @@ pub trait TdfStruct {
     fn serialize(&self) -> TdfResult<Vec<Tdf>>;
 
     /// Function for deserializing vec of Tdf's into self
-    fn deserialize(contents: Vec<Tdf>) -> Self;
+    fn deserialize(contents: Vec<Tdf>) -> TdfResult<Self> where Self: Sized;
 }
 
 #[derive(TdfStruct)]
@@ -33,5 +33,14 @@ struct Other {
     #[tag("TEST")]
     d: Vec<u8>,
     #[tag("TEST")]
-    f: Vec<u64>
+    f: Vec<u64>,
+}
+
+pub fn test_compose() {
+
+    let contents = vec![
+        Tdf::new("TEST", TdfValue::VarInt(1)),
+
+    ]
+
 }
