@@ -156,12 +156,8 @@ impl Writable for Packet {
         out.write_u16::<BE>(self.command)?;
         out.write_u16::<BE>(self.error)?;
         let dir_value: u16 = (&self.dir).into();
-        out.write_u8((dir_value << 8) as u8)?;
-        if is_extended {
-            out.write_u8(0x10)?;
-        } else {
-            out.write_u8(0x00)?;
-        }
+        out.write_u8((dir_value >> 8) as u8)?;
+        out.write_u8(if is_extended { 0x10 } else { 0x00 })?;
         out.write_u16::<BE>(self.id)?;
         if is_extended {
             out.write_u8(((content_size & 0xFF000000) >> 24) as u8)?;

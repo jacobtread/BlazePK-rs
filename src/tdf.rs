@@ -21,6 +21,105 @@ impl Tdf {
         }
     }
 
+    pub fn str(name: &str, value: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::String(value.to_string()),
+        }
+    }
+
+    pub fn num(name: &str, value: u64) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::VarInt(value),
+        }
+    }
+
+    pub fn pair(name: &str, a: u64, b: u64) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Pair(VarIntPair(a, b)),
+        }
+    }
+
+    pub fn triple(name: &str, a: u64, b: u64, c: u64) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Triple(VarIntTriple(a, b, c)),
+        }
+    }
+
+    pub fn float(name: &str, value: f32) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Float(value),
+        }
+    }
+
+    pub fn bool(name: &str, value: bool) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::VarInt(if value { 1 } else { 0 }),
+        }
+    }
+
+    pub fn blob(name: &str, values: Vec<u8>) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Blob(values),
+        }
+    }
+
+    pub fn num_list(name: &str, values: Vec<u64>) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::VarIntList(values),
+        }
+    }
+
+    pub fn list(name: &str, value_type: TdfValueType, values: Vec<TdfValue>) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::List { value_type, values },
+        }
+    }
+
+    pub fn map(
+        name: &str,
+        key_type: TdfValueType,
+        value_type: TdfValueType,
+        map: LinkedHashMap<TdfValue, TdfValue>,
+    ) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Map { key_type, value_type, map },
+        }
+    }
+
+    pub fn group(name: &str, values: Vec<Tdf>) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Group { start2: false, values },
+        }
+    }
+
+    pub fn group_with_2(name: &str, values: Vec<Tdf>) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Group { start2: true, values },
+        }
+    }
+
+    pub fn optional(name: &str, value_type: u8, value: Option<Tdf>) -> Self {
+        Self {
+            name: name.to_string(),
+            value: TdfValue::Optional {
+                value_type,
+                value: value.map(|v| Box::new(v)),
+            },
+        }
+    }
+
     /// Convert string label into u32 encoded tag
     pub fn label_to_tag(label: &String) -> u32 {
         // Array of output bytes for tag
