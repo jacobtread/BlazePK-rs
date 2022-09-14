@@ -99,12 +99,22 @@ pub struct DecodedPacket {
 }
 
 impl DecodedPacket {
-    pub fn decode<T>(&self) {}
-}
+    pub fn read_contents(&self) -> TdfResult<Vec<Tdf>> {
+        let contents = &self.contents;
+        let content_length = contents.len() as u64;
+        let cursor = &mut TdfRead::new(Cursor::new(contents));
+        let mut values = Vec::new();
+        loop {
+            if cursor.position() >= content_length {
+                break;
+            }
+            let value = Tdf::read(cursor)?;
+            values.push(value);
+        }
+        Ok(values)
+    }
 
-
-impl Readable for DecodedPacket {
-    fn read<R: Read>(input: &mut TdfRead<R>) -> TdfResult<Self> where Self: Sized {
+    pub fn read<R: Read>(input: &mut R) -> TdfResult<Self> where Self: Sized {
         let length = input.read_u16::<BE>()?;
         let component = input.read_u16::<BE>()?;
         let command = input.read_u16::<BE>()?;
@@ -117,9 +127,8 @@ impl Readable for DecodedPacket {
             0
         };
         let content_length: u32 = length as u32 + ((ext_length as u32) << 16);
-        let mut bytes = Vec::with_capacity(content_length as usize);
+        let mut bytes = vec![0u8; content_length as usize];
         input.read_exact(&mut bytes)?;
-
         Ok(DecodedPacket {
             component,
             command,
@@ -130,6 +139,7 @@ impl Readable for DecodedPacket {
         })
     }
 }
+
 
 impl Writable for Packet {
     fn write<W: Write>(&self, out: &mut W) -> EmptyTdfResult {

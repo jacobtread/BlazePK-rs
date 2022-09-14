@@ -1,78 +1,24 @@
 use std::io::{Read, Write};
 use byteorder::{ReadBytesExt, WriteBytesExt};
-use linked_hash_map::LinkedHashMap;
 use crate::error::{EmptyTdfResult, TdfResult};
 use crate::io::{Readable, TdfRead, Writable};
-use crate::tdf::{Tdf, TdfValue, TdfValueType};
 
 /// Type for variable length integer. Value is encoded to different
 /// lengths based on how large it is rather than always taking
 /// the same size. This value is represented as a u64
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct VarInt(pub u64);
 
 // Type for storing two variable length integers.
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct VarIntPair(pub u64, pub u64);
 
 // Type for storing three variable length integers
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct VarIntTriple(pub u64, pub u64, pub u64);
 
 /// Type for list of variable length integer
 pub type VarIntList = Vec<u64>;
-
-/// Represents a group of tdf values that can
-/// possibly start with a 2
-#[derive(Clone)]
-pub struct TdfGroup {
-    pub start2: bool,
-    pub values: Vec<Tdf>,
-}
-
-impl PartialEq for TdfGroup {
-    fn eq(&self, _: &Self) -> bool {
-        return false
-    }
-}
-
-// Represents a list of
-#[derive(Clone)]
-pub struct TdfList {
-    pub value_type: TdfValueType,
-    pub values: Vec<TdfValue>,
-}
-
-impl PartialEq for TdfList {
-    fn eq(&self, _: &Self) -> bool {
-        return false
-    }
-}
-
-
-/// Represents a mapping of tdf value keys to tdf value
-/// values
-#[derive(Clone, PartialEq)]
-pub struct TdfMap {
-    pub key_type: TdfValueType,
-    pub value_type: TdfValueType,
-    pub map: LinkedHashMap<TdfValue, TdfValue>,
-}
-
-/// Represents a value that may be present
-/// or not depending on value_type
-#[derive(Clone)]
-pub struct TdfOptional {
-    pub value_type: u8,
-    pub value: Option<Box<Tdf>>,
-}
-
-
-impl PartialEq for TdfOptional {
-    fn eq(&self, _: &Self) -> bool {
-        return false
-    }
-}
 
 /// Implement from VarInt for u64 to convert VarInt to a u64 which
 /// is just the value stored inside it
@@ -125,7 +71,7 @@ pub fn read_var_int<R: Read>(input: &mut R) -> TdfResult<u64> {
 
 pub fn read_byte_array<R: Read>(input: &mut R) -> TdfResult<Vec<u8>> {
     let length = read_var_int(input)? as usize;
-    let mut bytes = Vec::with_capacity(length);
+    let mut bytes = vec![0u8; length as usize];
     input.read_exact(&mut bytes)?;
     return Ok(bytes);
 }

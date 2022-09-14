@@ -4,9 +4,9 @@ use byteorder::{BE, ReadBytesExt, WriteBytesExt};
 use linked_hash_map::LinkedHashMap;
 use crate::error::{EmptyTdfResult, TdfError, TdfResult};
 use crate::io::{Readable, TdfRead, TypedReadable, Writable};
-use crate::types::{read_byte_array, read_var_int, TdfGroup, TdfList, TdfMap, TdfOptional, VarIntList, VarIntPair, VarIntTriple, write_byte_array, write_var_int};
+use crate::types::{read_byte_array, read_var_int, VarIntList, VarIntPair, VarIntTriple, write_byte_array, write_var_int};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tdf {
     pub name: String,
     pub value: TdfValue,
@@ -100,7 +100,7 @@ impl Tdf {
 impl Readable for Tdf {
     fn read<R: Read>(input: &mut TdfRead<R>) -> TdfResult<Self> where Self: Sized {
         let mut tag: [u8; 3] = [0, 0, 0];
-        input.read(&mut tag)?;
+        input.read_exact(&mut tag)?;
         let rtype = TdfValueType::try_read(input)?;
         let name = Tdf::tag_to_label(&tag);
         let value = TdfValue::read(&rtype, input)?;
@@ -127,7 +127,7 @@ impl Writable for Tdf {
 
 /// Enum for the different types of Tdf values
 #[repr(u8)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TdfValueType {
     VarInt = 0x0,
     String = 0x1,
@@ -203,24 +203,74 @@ impl TdfValueType {
     }
 }
 
-#[derive(Clone,PartialEq)]
+#[derive(Clone, Debug)]
 pub enum TdfValue {
     VarInt(u64),
     String(String),
     Blob(Vec<u8>),
-    Group(TdfGroup),
-    List(TdfList),
-    Map(TdfMap),
-    Optional(TdfOptional),
+    Group {
+        start2: bool,
+        values: Vec<Tdf>,
+    },
+    List {
+        value_type: TdfValueType,
+        values: Vec<TdfValue>,
+    },
+    Map {
+        key_type: TdfValueType,
+        value_type: TdfValueType,
+        map: LinkedHashMap<TdfValue, TdfValue>,
+    },
+    Optional {
+        value_type: u8,
+        value: Option<Box<Tdf>>,
+    },
     VarIntList(VarIntList),
     Pair(VarIntPair),
     Triple(VarIntTriple),
     Float(f32),
 }
 
-impl TdfValue {
-    fn tag(self, tag: &str) -> Tdf {
-        Tdf::new(tag.to_string(), self)
+impl PartialEq for TdfValue {
+    fn eq(&self, other: &Self) -> bool {
+        match self {
+            TdfValue::VarInt(value) => {
+                if let TdfValue::VarInt(value1) = other {
+                    value.eq(value1)
+                } else {
+                    false
+                }
+            }
+            TdfValue::String(value) => {
+                if let TdfValue::String(value1) = other {
+                    value.eq(value1)
+                } else {
+                    false
+                }
+            }
+            TdfValue::Pair(value) => {
+                if let TdfValue::Pair(value1) = other {
+                    value.eq(value1)
+                } else {
+                    false
+                }
+            }
+            TdfValue::Triple(value) => {
+                if let TdfValue::Triple(value1) = other {
+                    value.eq(value1)
+                } else {
+                    false
+                }
+            }
+            TdfValue::Float(value) => {
+                if let TdfValue::Float(value1) = other {
+                    value.eq(value1)
+                } else {
+                    false
+                }
+            }
+            _ => false
+        }
     }
 }
 
@@ -242,10 +292,10 @@ impl From<&TdfValue> for TdfValueType {
             TdfValue::VarInt(_) => TdfValueType::VarInt,
             TdfValue::String(_) => TdfValueType::String,
             TdfValue::Blob(_) => TdfValueType::Blob,
-            TdfValue::Group(_) => TdfValueType::Group,
-            TdfValue::List(_) => TdfValueType::List,
-            TdfValue::Map(_) => TdfValueType::Map,
-            TdfValue::Optional(_) => TdfValueType::Optional,
+            TdfValue::Group { .. } => TdfValueType::Group,
+            TdfValue::List { .. } => TdfValueType::List,
+            TdfValue::Map { .. } => TdfValueType::Map,
+            TdfValue::Optional { .. } => TdfValueType::Optional,
             TdfValue::VarIntList(_) => TdfValueType::VarIntList,
             TdfValue::Pair(_) => TdfValueType::Pair,
             TdfValue::Triple(_) => TdfValueType::Triple,
@@ -261,34 +311,34 @@ impl Writable for TdfValue {
                 write_var_int(*value, out)?;
             }
             TdfValue::String(value) => {
-                let bytes = value.clone().into_bytes();
+                let mut bytes = value.clone().into_bytes();
+                bytes.push(0);
                 write_byte_array(&bytes, out)?;
             }
             TdfValue::Blob(value) => {
                 write_byte_array(value, out)?;
             }
-            TdfValue::Group(value) => {
-                if value.start2 {
+            TdfValue::Group { start2, values } => {
+                if *start2 {
                     out.write_u8(2)?;
                 }
 
-                for value in &value.values {
+                for value in values {
                     value.write(out)?;
                 }
 
                 out.write_u8(0)?
             }
-            TdfValue::List(value) => {
-                value.value_type.write(out)?;
-                for value in &value.values {
+            TdfValue::List { value_type, values } => {
+                value_type.write(out)?;
+                for value in values {
                     value.write(out)?;
                 }
             }
-            TdfValue::Map(value) => {
-                value.key_type.write(out)?;
-                value.value_type.write(out)?;
+            TdfValue::Map { key_type, value_type, map } => {
+                key_type.write(out)?;
+                value_type.write(out)?;
 
-                let map = &value.map;
                 write_var_int(map.len() as u64, out)?;
 
                 for entry in map {
@@ -296,9 +346,9 @@ impl Writable for TdfValue {
                     entry.1.write(out)?;
                 }
             }
-            TdfValue::Optional(value) => {
-                out.write_u8(value.value_type)?;
-                if let Some(value) = &value.value {
+            TdfValue::Optional { value_type, value } => {
+                out.write_u8(*value_type)?;
+                if let Some(value) = value {
                     value.write(out)?;
                 }
             }
@@ -331,7 +381,10 @@ impl TypedReadable for TdfValue {
                 Ok(TdfValue::VarInt(value))
             }
             TdfValueType::String => {
-                let bytes = read_byte_array(input)?;
+                let mut bytes = read_byte_array(input)?;
+                // Pop the \0 terminator for the string before reading it
+                bytes.pop();
+
                 let text = String::from_utf8_lossy(&bytes)
                     .to_string();
                 Ok(TdfValue::String(text))
@@ -356,7 +409,7 @@ impl TypedReadable for TdfValue {
                         values.push(value);
                     }
                 }
-                Ok(TdfValue::Group(TdfGroup { start2, values }))
+                Ok(TdfValue::Group { start2, values })
             }
             TdfValueType::List => {
                 let value_type = TdfValueType::try_read(input)?;
@@ -366,7 +419,7 @@ impl TypedReadable for TdfValue {
                     let value = TdfValue::read(&value_type, input)?;
                     values.push(value);
                 }
-                Ok(TdfValue::List(TdfList { value_type, values }))
+                Ok(TdfValue::List { value_type, values })
             }
             TdfValueType::Map => {
                 let key_type = TdfValueType::try_read(input)?;
@@ -378,7 +431,7 @@ impl TypedReadable for TdfValue {
                     let value = TdfValue::read(&value_type, input)?;
                     map.insert(key, value);
                 }
-                Ok(TdfValue::Map(TdfMap { key_type, value_type, map }))
+                Ok(TdfValue::Map { key_type, value_type, map })
             }
             TdfValueType::Optional => {
                 let value_type = input.read_u8()?;
@@ -387,7 +440,7 @@ impl TypedReadable for TdfValue {
                 } else {
                     None
                 };
-                Ok(TdfValue::Optional(TdfOptional { value_type, value }))
+                Ok(TdfValue::Optional { value_type, value })
             }
             TdfValueType::VarIntList => {
                 let length = read_var_int(input)? as usize;
@@ -413,17 +466,28 @@ impl TypedReadable for TdfValue {
     }
 }
 
-impl TdfLookup for Vec<Tdf> {
-    fn get_by_tag(&self, tag: &String) -> Option<Tdf> {
-        for tdf in self {
-            if tdf.name.eq(tag) {
-                return Some(tdf.clone());
-            }
+trait TdfLookup {
+    fn take_by_tag(&mut self, tag: &String) -> Option<TdfValue>;
+}
+
+impl TdfLookup for TdfValue {
+    fn take_by_tag(&mut self, tag: &String) -> Option<TdfValue> {
+        match self {
+            TdfValue::Group { values, .. } => values.take_by_tag(tag),
+            _ => None
         }
-        None
     }
 }
 
-trait TdfLookup {
-    fn get_by_tag(&self, tag: &String) -> Option<Tdf>;
+impl TdfLookup for Vec<Tdf> {
+    fn take_by_tag(&mut self, tag: &String) -> Option<TdfValue> {
+        let pos = self.iter()
+            .position(|tdf| tdf.name.eq(tag));
+        if let Some(pos) = pos {
+            let value = self.remove(pos);
+            Some(value.value)
+        } else {
+            None
+        }
+    }
 }

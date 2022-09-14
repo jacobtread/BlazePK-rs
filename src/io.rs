@@ -1,8 +1,7 @@
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use byteorder::ReadBytesExt;
 use crate::error::{EmptyTdfResult, TdfResult};
 use crate::tdf::TdfValueType;
-
 /// Trait for something that can be written to the provided output
 pub trait Writable: Send + Sync {
     /// Function which handles writing self to the out
@@ -30,6 +29,12 @@ pub struct TdfRead<R> {
     inner: R,
     peeked: Option<u8>,
     reverted: bool,
+}
+
+impl<V> TdfRead<Cursor<V>>  {
+    pub fn position(&mut self) -> u64 {
+        self.inner.position()
+    }
 }
 
 impl<R: Read> TdfRead<R> {
@@ -70,7 +75,7 @@ impl<R: Read> TdfRead<R> {
 impl<R: Read> Read for TdfRead<R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if self.reverted {
-            if let Some(peeked) = self.peeked {
+            if let Some(peeked) = self.peeked.take() {
                 let buf_len = buf.len();
                 // Ignore buffers that have no length
                 if buf_len < 1 {
@@ -83,7 +88,7 @@ impl<R: Read> Read for TdfRead<R> {
                 // If the buffer still has more capacity
                 if buf_len > 1 {
                     // Read the remaining length from the inner buffer
-                    let mut byte_buff = Vec::with_capacity(buf_len - 1);
+                    let mut byte_buff = vec![0u8; (buf_len - 1)];
                     let inner_read_count = self.inner.read(&mut byte_buff)?;
                     for i in 0..inner_read_count {
                         let value = byte_buff[i];
