@@ -1,4 +1,6 @@
 use std::fmt::Debug;
+use std::io;
+use std::io::Read;
 use std::thread::current;
 
 /// Structure for reading over a vec
@@ -99,3 +101,26 @@ pub trait Codec: Debug + Sized {
         Self::decode(&mut reader)
     }
 }
+
+impl Codec for u16 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let bytes: [u8; 2] = self.to_be_bytes();
+        output.extend_from_slice(&bytes);
+    }
+
+    fn decode(reader: &mut Reader) -> Option<Self> {
+        let bytes = reader.take(2)?;
+        Some(u16::from_be_bytes(bytes.try_into().ok()?))
+    }
+}
+
+pub trait ReadBytesExt: Read {
+    #[inline]
+    fn read_u16(&mut self) -> io::Result<u16> {
+        let mut buffer = [0; 2];
+        self.read_exact(&mut buffer)?;
+        Ok(u16::from_be_bytes(buffer))
+    }
+}
+
+impl<W: Read> ReadBytesExt for W {}
