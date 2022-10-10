@@ -32,9 +32,9 @@ pub type PacketResult<T> = Result<T, PacketError>;
 pub struct EmptyContent {}
 
 impl Codec for EmptyContent {
-    fn encode(&self, output: &mut Vec<u8>) {}
+    fn encode(&self, _: &mut Vec<u8>) {}
 
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+    fn decode(_: &mut Reader) -> CodecResult<Self> {
         Ok(EmptyContent {})
     }
 }
