@@ -1,4 +1,4 @@
-use crate::tdf::ValueType;
+use crate::tag::ValueType;
 use std::fmt::{Debug, Formatter};
 
 /// Structure for reading over a vec

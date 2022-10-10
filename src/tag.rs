@@ -2,8 +2,36 @@ use crate::codec::{Codec, CodecError, CodecResult, Reader};
 use crate::types::{VarInt, VarIntList, EMPTY_OPTIONAL};
 use std::fmt::Debug;
 
+/// Tag for a Tdf value. This contains the String tag for naming
+/// the field and then the type of the field
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tag(pub String, pub ValueType);
+
+/// Encoding structure for Codec values tagged with a string tag
+/// these are encoded as the tag then the value
+pub type TaggedValue<T> = (String, T);
+
+impl<T: Codec> Codec for TaggedValue<T> {
+    fn encode(&self, output: &mut Vec<u8>) {
+        Tag::encode_from(&self.0, &T::value_type(), output);
+        T::encode(&self.1, output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        let tag = Tag::decode(reader)?;
+
+        let expected_type = T::value_type();
+        let actual_type = tag.1;
+
+        if actual_type != expected_type {
+            return Err(CodecError::UnexpectedType(expected_type, actual_type));
+        }
+
+        let value = T::decode(reader)?;
+
+        Ok((tag.0, value))
+    }
+}
 
 impl Tag {
     /// Reads through the provided reader until a tag with
@@ -252,7 +280,7 @@ impl ValueType {
 #[cfg(test)]
 mod test {
     use crate::codec::{Codec, Reader};
-    use crate::tdf::{Tag, ValueType};
+    use crate::tag::{Tag, ValueType};
 
     #[test]
     fn test_read_write() {

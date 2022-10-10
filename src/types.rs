@@ -1,5 +1,5 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
-use crate::tdf::ValueType;
+use crate::tag::{TaggedValue, ValueType};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -23,13 +23,19 @@ trait AsVarInt: PartialEq + Eq + Debug {
 }
 
 /// Macro for automatically generating From traits for VarInt
-/// for the variatey of number possibilities
+/// for the all the number types
 macro_rules! into_var_int {
     ($($ty:ty),*) => {
         $(
             impl From<$ty> for VarInt {
                 fn from(value: $ty) -> VarInt {
                     VarInt(value as u64)
+                }
+            }
+
+            impl Into<$ty> for VarInt {
+                fn into(self) -> $ty {
+                    self.0 as $ty
                 }
             }
         )*
@@ -44,12 +50,12 @@ macro_rules! as_var_int {
             impl AsVarInt for $ty {
                 #[inline]
                 fn to_var_int(self) -> VarInt {
-                    VarInt(self as u64)
+                    VarInt::from(self)
                 }
 
                 #[inline]
                 fn from_var_int(value: VarInt) -> $ty {
-                    value.0 as $ty
+                    value.into()
                 }
             }
         )*
@@ -98,7 +104,7 @@ impl VarIntList {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TdfOptional<T: Codec> {
-    Some(u8, T),
+    Some(u8, TaggedValue<T>),
     None,
 }
 
@@ -499,7 +505,7 @@ impl<T: Codec> Codec for TdfOptional<T> {
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
         let ty = reader.take_one()?;
         Ok(if ty != 0x7F {
-            let value = T::decode(reader)?;
+            let value = TaggedValue::<T>::decode(reader)?;
             TdfOptional::Some(ty, value)
         } else {
             TdfOptional::None

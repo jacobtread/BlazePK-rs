@@ -1,7 +1,10 @@
+//! Rust implementation of the Blaze packet system
+//!
+//! See README for usage
 mod codec;
 pub mod macros;
 mod packet;
-mod tdf;
+mod tag;
 mod types;
 
 pub use codec::{Codec, CodecError, CodecResult, Reader};
@@ -9,5 +12,5 @@ pub use packet::{
     AtomicCounter, OpaquePacket, Packet, PacketComponent, PacketContent, PacketError, PacketResult,
     Packets, RequestCounter, SimpleCounter,
 };
-pub use tdf::{Tag, ValueType};
+pub use tag::{Tag, ValueType};
 pub use types::{Listable, TdfMap, TdfOptional, VarInt, VarIntList, EMPTY_OPTIONAL};

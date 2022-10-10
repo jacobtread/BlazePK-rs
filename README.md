@@ -49,6 +49,7 @@ the following table lists the following
 | VarIntList                           | List of variable length integers      |
 | (VarInt, VarInt)                     | Pair of two VarInts                   |
 | (VarInt, VarInt, VarInt)             | Tuple of three VarInts                |
+| f32                                  | Only floating point type supported    |
 
 
 ```rust
