@@ -1,5 +1,5 @@
-pub(crate) mod codec;
+pub mod codec;
+pub mod macros;
 pub mod packet;
-mod structs;
 pub mod tdf;
 pub mod types;

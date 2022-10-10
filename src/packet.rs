@@ -8,6 +8,15 @@ use std::sync::atomic::{AtomicU16, Ordering};
 /// as packet contents
 pub trait PacketContent: Codec + Debug {}
 
+/// Trait for implementing packet target details
+pub trait PacketComponent: Debug {
+    fn component(&self) -> u16;
+
+    fn command(&self) -> u16;
+
+    fn from_value(value: u16) -> Self;
+}
+
 /// The different types of packets
 #[derive(Debug)]
 pub enum PacketType {
@@ -68,7 +77,7 @@ pub struct Packet<C: PacketContent> {
 impl<C: PacketContent> Packet<C> {
     /// Creates a new response packet for responding to the provided
     /// decodable packet. With the `contents`
-    pub fn response(&self, packet: &OpaquePacket, contents: C) -> Packet<C> {
+    pub fn response(packet: &OpaquePacket, contents: C) -> Packet<C> {
         Packet {
             component: packet.component,
             command: packet.command,
@@ -81,7 +90,7 @@ impl<C: PacketContent> Packet<C> {
 
     /// Creates a new error response packet for responding to the
     /// provided packet with an error number with `contents`
-    pub fn error(&self, packet: &OpaquePacket, error: impl Into<u16>, contents: C) -> Packet<C> {
+    pub fn error(packet: &OpaquePacket, error: impl Into<u16>, contents: C) -> Packet<C> {
         Packet {
             component: packet.component,
             command: packet.command,
@@ -94,15 +103,10 @@ impl<C: PacketContent> Packet<C> {
 
     /// Creates a new notify packet with the provided component and command
     /// and `contents`
-    pub fn notify(
-        &self,
-        component: impl Into<u16>,
-        command: impl Into<u16>,
-        contents: C,
-    ) -> Packet<C> {
+    pub fn notify(component: impl PacketComponent, contents: C) -> Packet<C> {
         Packet {
-            component: component.into(),
-            command: command.into(),
+            component: component.component(),
+            command: component.command(),
             error: 0,
             ty: PacketType::Notify,
             id: 0,
@@ -113,15 +117,13 @@ impl<C: PacketContent> Packet<C> {
     /// Creates a new request packet retrieving its ID from the provided
     /// request counter.
     pub fn request<R: RequestCounter>(
-        &self,
         counter: &mut R,
-        component: impl Into<u16>,
-        command: impl Into<u16>,
+        component: impl PacketComponent,
         contents: C,
     ) -> Packet<C> {
         Packet {
-            component: component.into(),
-            command: command.into(),
+            component: component.component(),
+            command: component.command(),
             error: 0,
             ty: PacketType::Notify,
             id: counter.next(),
@@ -264,5 +266,45 @@ impl AtomicCounter {
 impl RequestCounter for AtomicCounter {
     fn next(&mut self) -> u16 {
         self.value.fetch_add(1, Ordering::AcqRel)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::packet::Packet;
+    use crate::types::VarInt;
+    use crate::{define_components, packet};
+
+    packet! {
+        struct Test {
+            TEST: String,
+            ALT: VarInt,
+        }
+    }
+
+    define_components! {
+        Authentication (0x0) {
+            First (0x1)
+            Second (0x2)
+            Third (0x3)
+        }
+
+        Other (0x1) {
+            First (0x1)
+            Second (0x2)
+            Third (0x3)
+        }
+
+    }
+
+    #[test]
+    fn test() {
+        let contents = Test {
+            TEST: String::from("Test"),
+            ALT: VarInt(0),
+        };
+        println!("{:?}", contents);
+        let packet = Packet::notify(components::Authentication::Second, contents);
+        println!("{packet:?}")
     }
 }

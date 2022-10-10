@@ -173,6 +173,70 @@ macro_rules! group {
     };
 }
 
+/// Macro for defining component enums for packet identification
+///
+/// ```
+///use blaze_pk::define_components;
+///define_components! {
+///    Authentication (0x00) {
+///        Key (0x00)
+///        Alert (0x02)
+///        Value (0x23)
+///    }
+///
+///    Other (0x1) {
+///        Key (0x00)
+///        Alert (0x02)
+///    }
+/// }
+/// ```
+#[macro_export]
+macro_rules! define_components {
+    (
+
+        $(
+            $component:ident ($component_value:literal) {
+                $(
+                    $command:ident ($command_value:literal)
+                )*
+            }
+        )*
+    ) => {
+
+
+        pub mod components {
+            $(
+                #[derive(Debug)]
+                pub enum $component {
+                    $($command),*,
+                    Unknown(u16)
+                }
+
+                impl $crate::packet::PacketComponent for $component {
+
+                    fn component(&self) -> u16 {
+                        $component_value
+                    }
+
+                    fn command(&self) -> u16 {
+                        match self {
+                            $(Self::$command => $command_value),*,
+                            Self::Unknown(value) => *value,
+                        }
+                    }
+
+                    fn from_value(value: u16) -> Self {
+                        match value {
+                            $($command_value => Self::$command),*,
+                            value => Self::Unknown(value)
+                        }
+                    }
+                }
+            )*
+        }
+    };
+}
+
 #[cfg(test)]
 mod test {
     use crate::codec::{Codec, Reader};
