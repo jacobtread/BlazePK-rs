@@ -1,6 +1,5 @@
 use crate::tdf::ValueType;
-use derive_more::Display;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 
 /// Structure for reading over a vec
 /// of bytes using a cursor.
@@ -57,32 +56,50 @@ impl<'a> Reader<'a> {
 }
 
 /// Errors for when decoding packet structures
-#[derive(Debug, Display)]
 pub enum CodecError {
-    #[display(fmt = "Missing field {}", _0)]
     MissingField(&'static str),
-    #[display(fmt = "Unable to decode field {}", _0)]
     DecodeFail(&'static str, Box<CodecError>),
-    #[display(fmt = "Unexpected type; expected {} but got {}", _0, _1)]
     UnexpectedType(ValueType, ValueType),
-    #[display(
-        fmt = "Unexpected type for field {} expected {} but got {}",
-        _0,
-        _1,
-        _2
-    )]
     UnexpectedFieldType(&'static str, ValueType, ValueType),
-    #[display(
-        fmt = "Didn't have enough bytes (cursor: {}, wanted: {}, remaining: {})",
-        _0,
-        _1,
-        _2
-    )]
     NotEnoughBytes(usize, usize, usize),
-    #[display(fmt = "Unknown error occurred when trying to fit bytes")]
     UnknownError,
-    #[display(fmt = "Attempted to decode packet contents twice")]
     DecodedTwice,
+}
+
+impl Debug for CodecError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodecError::MissingField(field) => write!(f, "Missing field {field}"),
+            CodecError::DecodeFail(field, err) => {
+                write!(f, "Unable to decode field {}: {:?}", field, err)
+            }
+            CodecError::UnexpectedType(expected, got) => {
+                write!(
+                    f,
+                    "Unexpected type; expected {:?} but got {:?}",
+                    expected, got
+                )
+            }
+            CodecError::UnexpectedFieldType(field, expected, got) => {
+                write!(
+                    f,
+                    "Unexpected type for field {} expected {:?} but got {:?}",
+                    field, expected, got
+                )
+            }
+            CodecError::NotEnoughBytes(cursor, wanted, remaining) => {
+                write!(
+                    f,
+                    "Didn't have enough bytes (cursor: {}, wanted: {}, remaining: {})",
+                    cursor, wanted, remaining
+                )
+            }
+            CodecError::UnknownError => {
+                f.write_str("Unknown error occurred when trying to fit bytes")
+            }
+            CodecError::DecodedTwice => f.write_str("Attempted to decode packet contents twice"),
+        }
+    }
 }
 
 pub type CodecResult<T> = Result<T, CodecError>;

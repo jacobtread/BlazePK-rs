@@ -1,5 +1,4 @@
 use crate::codec::{decode_u16, Codec, CodecError, CodecResult, Reader};
-use derive_more::{Display, From};
 use std::fmt::Debug;
 use std::io;
 use std::io::{Read, Write};
@@ -7,12 +6,22 @@ use std::sync::atomic::{AtomicU16, Ordering};
 
 /// Enum for errors that could occur when dealing with packets
 /// (encoding and decoding)
-#[derive(Debug, From, Display)]
+#[derive(Debug)]
 pub enum PacketError {
-    #[display(fmt = "Error while decoding: {}", _0)]
     CodecError(CodecError),
-    #[display(fmt = "IO Error occurred: {}", _0)]
     IO(io::Error),
+}
+
+impl From<CodecError> for PacketError {
+    fn from(err: CodecError) -> Self {
+        PacketError::CodecError(err)
+    }
+}
+
+impl From<io::Error> for PacketError {
+    fn from(err: io::Error) -> Self {
+        PacketError::IO(err)
+    }
 }
 
 /// Result type for returning a value or Packet Error

@@ -2,8 +2,6 @@ use crate::codec::{Codec, CodecError, CodecResult, Reader};
 use crate::types::{VarInt, VarIntList, EMPTY_OPTIONAL};
 use std::fmt::Debug;
 
-use derive_more::Display;
-
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tag(pub String, pub ValueType);
 
@@ -189,31 +187,19 @@ impl Codec for Tag {
     }
 }
 
-#[derive(Debug, Display, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ValueType {
-    #[display(fmt = "VarInt")]
     VarInt,
-    #[display(fmt = "String")]
     String,
-    #[display(fmt = "Blob")]
     Blob,
-    #[display(fmt = "Group")]
     Group,
-    #[display(fmt = "List")]
     List,
-    #[display(fmt = "Map")]
     Map,
-    #[display(fmt = "Optional")]
     Optional,
-    #[display(fmt = "VarIntList")]
     VarIntList,
-    #[display(fmt = "Pair")]
     Pair,
-    #[display(fmt = "Triple")]
     Triple,
-    #[display(fmt = "Float")]
     Float,
-    #[display(fmt = "Unknown {}", _0)]
     Unknown(u8),
 }
 
