@@ -1,4 +1,6 @@
-use std::fmt::Debug;
+use crate::tdf::{Tag, ValueType};
+use derive_more::Display;
+use std::fmt::{Debug, Formatter};
 use std::io;
 use std::io::Read;
 use std::thread::current;
@@ -29,30 +31,39 @@ impl<'a> Reader<'a> {
     /// the cursor with the provided `count` number
     /// of bytes. Returns None if theres not enough
     /// bytes after the cursor
-    pub fn take(&mut self, count: usize) -> Option<&[u8]> {
+    pub fn take(&mut self, count: usize) -> CodecResult<&[u8]> {
         if self.remaining() < count {
-            return None;
+            return Err(CodecError::NotEnoughBytes(
+                self.cursor,
+                count,
+                self.remaining(),
+            ));
         }
 
         let current = self.cursor;
         self.cursor += count;
-        Some(&self.buffer[current..current + count])
+        Ok(&self.buffer[current..current + count])
     }
 
     /// Takes a single bytes from the reader increasing
     /// the cursor by one.
-    pub fn take_one(&mut self) -> Option<u8> {
+    pub fn take_one(&mut self) -> CodecResult<u8> {
         if self.remaining() < 1 {
-            return None;
+            return Err(CodecError::NotEnoughBytes(self.cursor, 1, 0));
         }
         let byte = self.buffer[self.cursor];
         self.cursor += 1;
-        Some(byte)
+        Ok(byte)
+    }
+
+    /// Step back a cursor position
+    pub fn step_back(&mut self) {
+        self.cursor -= 1;
     }
 
     /// Attempts to take a slice with the provided
     /// number of bytes and create a reader from it
-    pub fn slice(&mut self, count: usize) -> Option<Reader> {
+    pub fn slice(&mut self, count: usize) -> CodecResult<Reader> {
         self.take(count).map(Reader::new)
     }
 
@@ -76,7 +87,7 @@ impl<'a> Reader<'a> {
 
 /// Trait for implementing things that can be decoded from
 /// a Reader and encoded to a byte Vec
-pub trait Codec: Debug + Sized {
+pub trait Codec: Sized {
     /// Function for implementing encoding of Self to the
     /// provided vec of bytes
     fn encode(&self, output: &mut Vec<u8>);
@@ -84,7 +95,21 @@ pub trait Codec: Debug + Sized {
     /// Function for implementing decoding of Self from
     /// the provided Reader. Will return None if self
     /// cannot be decoded
-    fn decode(reader: &mut Reader) -> Option<Self>;
+    fn decode(reader: &mut Reader) -> CodecResult<Self>;
+
+    /// Function to provide functionality for skipping this
+    /// data type (e.g. read the bytes without using them)
+    fn skip(reader: &mut Reader) -> CodecResult<()> {
+        Self::decode(reader)?;
+        Ok(())
+    }
+
+    /// Optional additional specifier for Tdf types that
+    /// tells which type this is
+    #[inline]
+    fn value_type() -> ValueType {
+        ValueType::Unknown(0)
+    }
 
     /// Shortcut function for encoding self directly to
     /// a Vec of bytes
@@ -96,11 +121,40 @@ pub trait Codec: Debug + Sized {
 
     /// Shortcut function for decoding self directly
     /// from a slice of bytes.
-    fn decode_from(input: &[u8]) -> Option<Self> {
+    fn decode_from(input: &[u8]) -> CodecResult<Self> {
         let mut reader = Reader::new(input);
         Self::decode(&mut reader)
     }
 }
+
+/// Errors for when decoding packet structures
+#[derive(Debug, Display)]
+pub enum CodecError {
+    #[display(fmt = "Missing field {}", _0)]
+    MissingField(&'static str),
+    #[display(fmt = "Unable to decode field {}", _0)]
+    DecodeFail(&'static str, Box<CodecError>),
+    #[display(fmt = "Unexpected type; expected {} but got {}", _0, _1)]
+    UnexpectedType(ValueType, ValueType),
+    #[display(
+        fmt = "Unexpected type for field {} expected {} but got {}",
+        _0,
+        _1,
+        _2
+    )]
+    UnexpectedFieldType(&'static str, ValueType, ValueType),
+    #[display(
+        fmt = "Didn't have enough bytes (cursor: {}, wanted: {}, remaining: {})",
+        _0,
+        _1,
+        _2
+    )]
+    NotEnoughBytes(usize, usize, usize),
+    #[display(fmt = "Unknown error occurred when trying to fit bytes")]
+    UnknownError,
+}
+
+pub type CodecResult<T> = Result<T, CodecError>;
 
 impl Codec for u16 {
     fn encode(&self, output: &mut Vec<u8>) {
@@ -108,9 +162,25 @@ impl Codec for u16 {
         output.extend_from_slice(&bytes);
     }
 
-    fn decode(reader: &mut Reader) -> Option<Self> {
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
         let bytes = reader.take(2)?;
-        Some(u16::from_be_bytes(bytes.try_into().ok()?))
+        Ok(u16::from_be_bytes(
+            bytes.try_into().map_err(|_| CodecError::UnknownError)?,
+        ))
+    }
+}
+
+impl Codec for f32 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let bytes: [u8; 4] = self.to_be_bytes();
+        output.extend_from_slice(&bytes);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        let bytes = reader.take(4)?;
+        Ok(f32::from_be_bytes(
+            bytes.try_into().map_err(|_| CodecError::UnknownError)?,
+        ))
     }
 }
 
