@@ -206,7 +206,7 @@ macro_rules! define_components {
 
         pub mod components {
             $(
-                #[derive(Debug)]
+                #[derive(Debug, Eq, PartialEq)]
                 pub enum $component {
                     $($command),*,
                     Unknown(u16)

@@ -1,7 +1,6 @@
 use crate::tdf::ValueType;
 use derive_more::Display;
 use std::fmt::Debug;
-use std::io;
 
 /// Structure for reading over a vec
 /// of bytes using a cursor.
@@ -14,15 +13,6 @@ impl<'a> Reader<'a> {
     /// Creates a new reader for the provided buffer
     pub fn new(buffer: &[u8]) -> Reader {
         Reader { buffer, cursor: 0 }
-    }
-
-    /// Takes a slice of all bytes remaining after
-    /// the cursor moving the cursor to the end
-    /// of the buffer.
-    pub fn take_all(&mut self) -> &[u8] {
-        let rest = &self.buffer[self.cursor..];
-        self.cursor = self.buffer.len();
-        rest
     }
 
     /// Attempts to take a slice of the buffer after
@@ -59,69 +49,10 @@ impl<'a> Reader<'a> {
         self.cursor -= 1;
     }
 
-    /// Attempts to take a slice with the provided
-    /// number of bytes and create a reader from it
-    pub fn slice(&mut self, count: usize) -> CodecResult<Reader> {
-        self.take(count).map(Reader::new)
-    }
-
-    /// Returns whether there are any bytes remaining
-    /// after the cursor
-    pub fn has_remaining(&self) -> bool {
-        self.cursor < self.buffer.len()
-    }
-
     /// Returns the number of bytes remaining after
     /// the cursor
     pub fn remaining(&self) -> usize {
         self.buffer.len() - self.cursor
-    }
-
-    /// Returns the cursor position
-    pub fn cursor(&self) -> usize {
-        self.cursor
-    }
-}
-
-/// Trait for implementing things that can be decoded from
-/// a Reader and encoded to a byte Vec
-pub trait Codec: Sized {
-    /// Function for implementing encoding of Self to the
-    /// provided vec of bytes
-    fn encode(&self, output: &mut Vec<u8>);
-
-    /// Function for implementing decoding of Self from
-    /// the provided Reader. Will return None if self
-    /// cannot be decoded
-    fn decode(reader: &mut Reader) -> CodecResult<Self>;
-
-    /// Function to provide functionality for skipping this
-    /// data type (e.g. read the bytes without using them)
-    fn skip(reader: &mut Reader) -> CodecResult<()> {
-        Self::decode(reader)?;
-        Ok(())
-    }
-
-    /// Optional additional specifier for Tdf types that
-    /// tells which type this is
-    #[inline]
-    fn value_type() -> ValueType {
-        ValueType::Unknown(0)
-    }
-
-    /// Shortcut function for encoding self directly to
-    /// a Vec of bytes
-    fn encode_bytes(&self) -> Vec<u8> {
-        let mut output = Vec::new();
-        self.encode(&mut output);
-        output
-    }
-
-    /// Shortcut function for decoding self directly
-    /// from a slice of bytes.
-    fn decode_from(input: &[u8]) -> CodecResult<Self> {
-        let mut reader = Reader::new(input);
-        Self::decode(&mut reader)
     }
 }
 
@@ -156,6 +87,41 @@ pub enum CodecError {
 
 pub type CodecResult<T> = Result<T, CodecError>;
 
+/// Trait for implementing things that can be decoded from
+/// a Reader and encoded to a byte Vec
+pub trait Codec: Sized {
+    /// Function for implementing encoding of Self to the
+    /// provided vec of bytes
+    fn encode(&self, output: &mut Vec<u8>);
+
+    /// Function for implementing decoding of Self from
+    /// the provided Reader. Will return None if self
+    /// cannot be decoded
+    fn decode(reader: &mut Reader) -> CodecResult<Self>;
+
+    /// Function to provide functionality for skipping this
+    /// data type (e.g. read the bytes without using them)
+    fn skip(reader: &mut Reader) -> CodecResult<()> {
+        Self::decode(reader)?;
+        Ok(())
+    }
+
+    /// Optional additional specifier for Tdf types that
+    /// tells which type this is
+    #[inline]
+    fn value_type() -> ValueType {
+        ValueType::Unknown(0)
+    }
+
+    /// Shortcut function for encoding self directly to
+    /// a Vec of bytes
+    fn encode_bytes(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+        self.encode(&mut output);
+        output
+    }
+}
+
 impl Codec for u16 {
     fn encode(&self, output: &mut Vec<u8>) {
         let bytes: [u8; 2] = self.to_be_bytes();
@@ -184,13 +150,26 @@ impl Codec for f32 {
     }
 }
 
-pub trait ReadBytesExt: io::Read {
-    #[inline]
-    fn read_u16(&mut self) -> io::Result<u16> {
-        let mut buffer = [0; 2];
-        self.read_exact(&mut buffer)?;
-        Ok(u16::from_be_bytes(buffer))
-    }
+/// Attempts to decode a u16 value from the provided slice
+pub fn decode_u16(value: &[u8]) -> CodecResult<u16> {
+    Ok(u16::from_be_bytes(
+        value.try_into().map_err(|_| CodecError::UnknownError)?,
+    ))
 }
 
-impl<R: io::Read> ReadBytesExt for R {}
+#[cfg(test)]
+mod test {
+    use crate::codec::Reader;
+
+    #[test]
+    pub fn test_reader_take_one() {
+        let bytes = [0, 15, 23, 5, 10, 0];
+        let mut reader = Reader::new(&bytes);
+
+        for i in 0..bytes.len() {
+            let byte = bytes[i];
+            let got = reader.take_one().unwrap();
+            assert_eq!(byte, got)
+        }
+    }
+}

@@ -1,15 +1,29 @@
-use crate::codec::{Codec, CodecResult, ReadBytesExt};
+use crate::codec::{decode_u16, Codec, CodecError, CodecResult, Reader};
+use derive_more::{Display, From};
 use std::fmt::Debug;
 use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU16, Ordering};
+
+/// Enum for errors that could occur when dealing with packets
+/// (encoding and decoding)
+#[derive(Debug, From, Display)]
+pub enum PacketError {
+    #[display(fmt = "Error while decoding: {}", _0)]
+    CodecError(CodecError),
+    #[display(fmt = "IO Error occurred: {}", _0)]
+    IO(io::Error),
+}
+
+/// Result type for returning a value or Packet Error
+pub type PacketResult<T> = Result<T, PacketError>;
 
 /// Trait implemented by Codec values that can be used
 /// as packet contents
 pub trait PacketContent: Codec + Debug {}
 
 /// Trait for implementing packet target details
-pub trait PacketComponent: Debug {
+pub trait PacketComponent: Debug + Eq + PartialEq {
     fn component(&self) -> u16;
 
     fn command(&self) -> u16;
@@ -18,7 +32,7 @@ pub trait PacketComponent: Debug {
 }
 
 /// The different types of packets
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PacketType {
     /// ID counted request packets
     Request,
@@ -56,10 +70,10 @@ impl PacketType {
     }
 }
 
-/// Structure for a packet created by ourselves where
-/// the data contents are already known and not encoded
-#[derive(Debug)]
-pub struct Packet<C: PacketContent> {
+/// Structure of packet header which comes before the
+/// packet content and describes it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PacketHeader {
     /// The component of this packet
     pub component: u16,
     /// The command of this packet
@@ -70,6 +84,65 @@ pub struct Packet<C: PacketContent> {
     pub ty: PacketType,
     /// The unique ID of this packet (Notify packets this is just zero)
     pub id: u16,
+}
+
+impl PacketHeader {
+    /// Encodes a packet header with the provided length value
+    pub fn encode_bytes(&self, length: usize) -> Vec<u8> {
+        let mut header = Vec::with_capacity(12);
+        let is_extended = length > 0xFFFF;
+        (length as u16).encode(&mut header);
+        self.component.encode(&mut header);
+        self.command.encode(&mut header);
+        self.error.encode(&mut header);
+        header.push((self.ty.value() >> 8) as u8);
+        header.push(if is_extended { 0x10 } else { 0x00 });
+        self.id.encode(&mut header);
+        if is_extended {
+            header.push(((length & 0xFF000000) >> 24) as u8);
+            header.push(((length & 0x00FF0000) >> 16) as u8);
+        }
+        header
+    }
+
+    /// Reads a packet header from the provided input as well as
+    /// the length of the content
+    pub fn read<R: Read>(input: &mut R) -> PacketResult<(PacketHeader, usize)>
+    where
+        Self: Sized,
+    {
+        let mut header = [0u8; 12];
+        input.read_exact(&mut header)?;
+        let mut length = decode_u16(&header[0..2])? as usize;
+        let component = decode_u16(&header[2..4])?;
+        let command = decode_u16(&header[4..6])?;
+        let error = decode_u16(&header[6..8])?;
+        let q_type = decode_u16(&header[8..10])?;
+        let id = decode_u16(&header[10..12])?;
+        if q_type & 0x10 != 0 {
+            let mut buffer = [0; 2];
+            input.read_exact(&mut buffer)?;
+            let ext_length = u16::from_be_bytes(buffer);
+            length += (ext_length as usize) << 16;
+        }
+        let ty = PacketType::from_value(q_type);
+        let header = PacketHeader {
+            component,
+            command,
+            error,
+            ty,
+            id,
+        };
+        Ok((header, length))
+    }
+}
+
+/// Structure for a packet created by ourselves where
+/// the data contents are already known and not encoded
+#[derive(Debug)]
+pub struct Packet<C: PacketContent> {
+    /// The packet header
+    pub header: PacketHeader,
     /// The contents of the packet
     pub contents: C,
 }
@@ -78,38 +151,31 @@ impl<C: PacketContent> Packet<C> {
     /// Creates a new response packet for responding to the provided
     /// decodable packet. With the `contents`
     pub fn response(packet: &OpaquePacket, contents: C) -> Packet<C> {
-        Packet {
-            component: packet.component,
-            command: packet.command,
-            error: 0,
-            ty: PacketType::Response,
-            id: packet.id,
-            contents,
-        }
+        let mut header = packet.header.clone();
+        header.ty = PacketType::Response;
+        Packet { header, contents }
     }
 
     /// Creates a new error response packet for responding to the
     /// provided packet with an error number with `contents`
     pub fn error(packet: &OpaquePacket, error: impl Into<u16>, contents: C) -> Packet<C> {
-        Packet {
-            component: packet.component,
-            command: packet.command,
-            error: error.into(),
-            ty: PacketType::Error,
-            id: packet.id,
-            contents,
-        }
+        let mut header = packet.header.clone();
+        header.error = error.into();
+        header.ty = PacketType::Error;
+        Packet { header, contents }
     }
 
     /// Creates a new notify packet with the provided component and command
     /// and `contents`
     pub fn notify(component: impl PacketComponent, contents: C) -> Packet<C> {
         Packet {
-            component: component.component(),
-            command: component.command(),
-            error: 0,
-            ty: PacketType::Notify,
-            id: 0,
+            header: PacketHeader {
+                component: component.component(),
+                command: component.command(),
+                error: 0,
+                ty: PacketType::Notify,
+                id: 0,
+            },
             contents,
         }
     }
@@ -122,13 +188,29 @@ impl<C: PacketContent> Packet<C> {
         contents: C,
     ) -> Packet<C> {
         Packet {
-            component: component.component(),
-            command: component.command(),
-            error: 0,
-            ty: PacketType::Notify,
-            id: counter.next(),
+            header: PacketHeader {
+                component: component.component(),
+                command: component.command(),
+                error: 0,
+                ty: PacketType::Request,
+                id: counter.next(),
+            },
             contents,
         }
+    }
+
+    /// Reads a packet from the provided input and parses the
+    /// contents
+    pub fn read<R: Read>(input: &mut R) -> PacketResult<Packet<C>>
+    where
+        Self: Sized,
+    {
+        let (header, length) = PacketHeader::read(input)?;
+        let mut contents = vec![0u8; length];
+        input.read_exact(&mut contents)?;
+        let mut reader = Reader::new(&contents);
+        let contents = C::decode(&mut reader)?;
+        Ok(Packet { header, contents })
     }
 
     /// Handles writing the header and contents of this packet to
@@ -138,28 +220,22 @@ impl<C: PacketContent> Packet<C> {
         Self: Sized,
     {
         let content = self.contents.encode_bytes();
-        let mut header = Vec::with_capacity(12);
-        let length = content.len();
-        let is_extended = length > 0xFFFF;
-
-        (length as u16).encode(&mut header);
-        self.component.encode(&mut header);
-        self.command.encode(&mut header);
-        self.error.encode(&mut header);
-
-        header.push((self.ty.value() >> 8) as u8);
-        header.push(if is_extended { 0x10 } else { 0x00 });
-
-        self.id.encode(&mut header);
-
-        if is_extended {
-            header.push(((length & 0xFF000000) >> 24) as u8);
-            header.push(((length & 0x00FF0000) >> 16) as u8);
-        }
-
+        let header = self.header.encode_bytes(content.len());
         output.write_all(&header)?;
         output.write_all(&content)?;
         Ok(())
+    }
+}
+
+impl<C: PacketContent> TryInto<Packet<C>> for OpaquePacket {
+    type Error = CodecError;
+
+    fn try_into(self) -> Result<Packet<C>, Self::Error> {
+        let contents = self.contents::<C>()?;
+        Ok(Packet {
+            header: self.header,
+            contents,
+        })
     }
 }
 
@@ -167,16 +243,8 @@ impl<C: PacketContent> Packet<C> {
 /// are not know and are encoded as a vector of bytes.
 #[derive(Debug)]
 pub struct OpaquePacket {
-    /// The component of this packet
-    pub component: u16,
-    /// The command of this packet
-    pub command: u16,
-    /// A possible error this packet contains (zero is none)
-    pub error: u16,
-    /// The type of this packet
-    pub ty: PacketType,
-    /// The unique ID of this packet (Notify packets this is just zero)
-    pub id: u16,
+    /// The packet header
+    pub header: PacketHeader,
     /// The raw encoded byte contents of the packet
     pub contents: Vec<u8>,
 }
@@ -184,41 +252,21 @@ pub struct OpaquePacket {
 impl OpaquePacket {
     /// Reads the contents of this encoded packet and tries to decode
     /// the `R` from it.
-    pub fn content<R: PacketContent>(&self) -> CodecResult<R> {
-        R::decode_from(&self.contents)
+    pub fn contents<R: PacketContent>(&self) -> CodecResult<R> {
+        let mut reader = Reader::new(&self.contents);
+        R::decode(&mut reader)
     }
 
-    /// Reads an OpaquePacket from the provided input
-    pub fn read<R: Read>(input: &mut R) -> io::Result<Self>
+    /// Reads a packet from the provided input without parsing
+    /// the contents of the packet
+    pub fn read<R: Read>(input: &mut R) -> PacketResult<Self>
     where
         Self: Sized,
     {
-        let length = input.read_u16()?;
-        let component = input.read_u16()?;
-        let command = input.read_u16()?;
-        let error = input.read_u16()?;
-        let q_type = input.read_u16()?;
-        let id = input.read_u16()?;
-        let ext_length = if (q_type & 0x10) != 0 {
-            input.read_u16()?
-        } else {
-            0
-        };
-
-        let content_length = length as usize + ((ext_length as usize) << 16);
-        let mut contents = vec![0u8; content_length];
+        let (header, length) = PacketHeader::read(input)?;
+        let mut contents = vec![0u8; length];
         input.read_exact(&mut contents)?;
-
-        let ty = PacketType::from_value(q_type);
-
-        Ok(OpaquePacket {
-            component,
-            command,
-            error,
-            ty,
-            id,
-            contents,
-        })
+        Ok(OpaquePacket { header, contents })
     }
 }
 
@@ -271,9 +319,10 @@ impl RequestCounter for AtomicCounter {
 
 #[cfg(test)]
 mod test {
-    use crate::packet::Packet;
+    use crate::packet::{OpaquePacket, Packet};
     use crate::types::VarInt;
     use crate::{define_components, packet};
+    use std::io::Cursor;
 
     packet! {
         struct Test {
@@ -305,6 +354,18 @@ mod test {
         };
         println!("{:?}", contents);
         let packet = Packet::notify(components::Authentication::Second, contents);
-        println!("{packet:?}")
+        println!("{packet:?}");
+
+        let mut out = Cursor::new(Vec::new());
+        packet.write(&mut out).unwrap();
+
+        let bytes = out.get_ref();
+        let mut bytes_in = Cursor::new(bytes);
+        let packet_in = OpaquePacket::read(&mut bytes_in).unwrap();
+        println!("{packet_in:?}");
+        let packet_in_dec: Packet<Test> = packet_in.try_into().unwrap();
+        println!("{packet_in_dec:?}");
+
+        assert_eq!(packet.header, packet_in_dec.header)
     }
 }
