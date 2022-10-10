@@ -139,39 +139,18 @@ pub trait Codec: Sized {
     }
 }
 
-impl Codec for u16 {
-    fn encode(&self, output: &mut Vec<u8>) {
-        let bytes: [u8; 2] = self.to_be_bytes();
-        output.extend_from_slice(&bytes);
-    }
-
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let bytes = reader.take(2)?;
-        Ok(u16::from_be_bytes(
-            bytes.try_into().map_err(|_| CodecError::UnknownError)?,
-        ))
-    }
-}
-
-impl Codec for f32 {
-    fn encode(&self, output: &mut Vec<u8>) {
-        let bytes: [u8; 4] = self.to_be_bytes();
-        output.extend_from_slice(&bytes);
-    }
-
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let bytes = reader.take(4)?;
-        Ok(f32::from_be_bytes(
-            bytes.try_into().map_err(|_| CodecError::UnknownError)?,
-        ))
-    }
-}
-
 /// Attempts to decode a u16 value from the provided slice
 pub fn decode_u16(value: &[u8]) -> CodecResult<u16> {
     Ok(u16::from_be_bytes(
         value.try_into().map_err(|_| CodecError::UnknownError)?,
     ))
+}
+
+/// Encodes the provided u16 value to bytes and extends
+/// the output slice with the bytes
+pub fn encode_u16(value: &u16, output: &mut Vec<u8>) {
+    let bytes = value.to_be_bytes();
+    output.extend_from_slice(&bytes);
 }
 
 #[cfg(test)]

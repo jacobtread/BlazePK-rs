@@ -12,13 +12,106 @@ pub trait TdfGroup: Codec + Debug {
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarInt(pub u64);
 
+/// Trait for converting var int to another type
+/// and back again
+trait AsVarInt: PartialEq + Eq + Debug {
+    /// Function for converting self to VarInt
+    fn to_var_int(self) -> VarInt;
+
+    /// Function for converting VarInt to self
+    fn from_var_int(value: VarInt) -> Self;
+}
+
+/// Macro for automatically generating From traits for VarInt
+/// for the variatey of number possibilities
+macro_rules! into_var_int {
+    ($($ty:ty),*) => {
+        $(
+            impl From<$ty> for VarInt {
+                fn from(value: $ty) -> VarInt {
+                    VarInt(value as u64)
+                }
+            }
+        )*
+    };
+}
+
+/// Macro for automatically generating the AsVarInt
+/// trait for conversion between types
+macro_rules! as_var_int {
+    ($($ty:ty),*) => {
+        $(
+            impl AsVarInt for $ty {
+                #[inline]
+                fn to_var_int(self) -> VarInt {
+                    VarInt(self as u64)
+                }
+
+                #[inline]
+                fn from_var_int(value: VarInt) -> $ty {
+                    value.0 as $ty
+                }
+            }
+        )*
+    };
+}
+
+into_var_int!(i8, i16, i32, i64, u8, u16, u32, u64);
+as_var_int!(i8, i16, i32, i64, u8, u16, u32, u64);
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarIntList(pub Vec<VarInt>);
+
+impl VarIntList {
+    /// Creates a new VarIntList
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    /// Creates a new VarIntList with the provided
+    /// capacity
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self(Vec::with_capacity(capacity))
+    }
+
+    /// Inserts a new value into the underlying list
+    pub fn insert(&mut self, value: impl Into<VarInt>) {
+        self.0.push(value.into())
+    }
+
+    /// Removes the value at the provided index and returns
+    /// the value stored at it if there is one
+    pub fn remove(&mut self, index: usize) -> Option<VarInt> {
+        if index < self.0.len() {
+            Some(self.0.remove(index))
+        } else {
+            None
+        }
+    }
+
+    /// Retrieves the value at the provided index returning
+    /// a borrow if one is there
+    pub fn get(&mut self, index: usize) -> Option<&VarInt> {
+        self.0.get(index)
+    }
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TdfOptional<T: Codec> {
     Some(u8, T),
     None,
+}
+
+impl<T: Codec> TdfOptional<T> {
+    /// Returns true if there is a value
+    pub fn is_some(&self) -> bool {
+        matches!(self, Self::Some(_, _))
+    }
+
+    /// Returns true if there is no value
+    pub fn is_none(&self) -> bool {
+        matches!(self, Self::None)
+    }
 }
 
 pub const EMPTY_OPTIONAL: u8 = 0x7F;
@@ -28,6 +121,7 @@ pub trait MapKey: PartialEq + Eq + Debug + Codec {}
 
 impl MapKey for String {}
 impl MapKey for VarInt {}
+
 /// Structure for Tdf maps these are maps that are created
 /// from two Vec so they retain insertion order but are slow
 /// for lookups. This implementation guarantees the lengths
@@ -239,6 +333,35 @@ impl<'a, K: MapKey, V: Codec> IntoIterator for &'a TdfMap<K, V> {
     }
 }
 
+impl Codec for f32 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let bytes: [u8; 4] = self.to_be_bytes();
+        output.extend_from_slice(&bytes);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        let bytes = reader.take(4)?;
+        Ok(f32::from_be_bytes(
+            bytes.try_into().map_err(|_| CodecError::UnknownError)?,
+        ))
+    }
+}
+
+impl<T: AsVarInt + Copy> Codec for T {
+    fn encode(&self, output: &mut Vec<u8>) {
+        (*self).to_var_int().encode(output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        let value = VarInt::decode(reader)?;
+        Ok(T::from_var_int(value))
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
 impl Codec for VarInt {
     fn encode(&self, output: &mut Vec<u8>) {
         let value = self.0;
@@ -327,7 +450,14 @@ impl Codec for Vec<u8> {
     }
 }
 
-impl<T: Codec> Codec for Vec<T> {
+/// Trait for a Codec value which can be apart of a Tdf list
+pub trait Listable: Codec {}
+
+impl Listable for VarInt {}
+impl Listable for String {}
+impl Listable for (VarInt, VarInt, VarInt) {}
+
+impl<T: Listable> Codec for Vec<T> {
     fn encode(&self, output: &mut Vec<u8>) {
         T::value_type().encode(output);
         VarInt(self.len() as u64).encode(output);

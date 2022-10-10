@@ -1,4 +1,4 @@
-use crate::codec::{decode_u16, Codec, CodecError, CodecResult, Reader};
+use crate::codec::{decode_u16, encode_u16, Codec, CodecError, CodecResult, Reader};
 use std::fmt::Debug;
 use std::io;
 use std::io::{Read, Write};
@@ -100,13 +100,13 @@ impl PacketHeader {
     pub fn encode_bytes(&self, length: usize) -> Vec<u8> {
         let mut header = Vec::with_capacity(12);
         let is_extended = length > 0xFFFF;
-        (length as u16).encode(&mut header);
-        self.component.encode(&mut header);
-        self.command.encode(&mut header);
-        self.error.encode(&mut header);
+        encode_u16(&(length as u16), &mut header);
+        encode_u16(&self.component, &mut header);
+        encode_u16(&self.command, &mut header);
+        encode_u16(&self.error, &mut header);
         header.push((self.ty.value() >> 8) as u8);
         header.push(if is_extended { 0x10 } else { 0x00 });
-        self.id.encode(&mut header);
+        encode_u16(&self.id, &mut header);
         if is_extended {
             header.push(((length & 0xFF000000) >> 24) as u8);
             header.push(((length & 0x00FF0000) >> 16) as u8);
@@ -337,6 +337,7 @@ mod test {
         struct Test {
             TEST: String,
             ALT: VarInt,
+            AA: u32,
         }
     }
 
@@ -360,6 +361,7 @@ mod test {
         let contents = Test {
             TEST: String::from("Test"),
             ALT: VarInt(0),
+            AA: 32,
         };
         println!("{:?}", contents);
         let packet = Packet::notify(components::Authentication::Second, contents);
@@ -369,7 +371,9 @@ mod test {
         packet.write(&mut out).unwrap();
 
         let bytes = out.get_ref();
+        println!("{bytes:?}");
         let mut bytes_in = Cursor::new(bytes);
+
         let packet_in = OpaquePacket::read(&mut bytes_in).unwrap();
         println!("{packet_in:?}");
         let packet_in_dec: Packet<Test> = packet_in.try_into().unwrap();
