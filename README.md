@@ -8,6 +8,7 @@ Mass Effect 3, Battlefield 3, another Other EA games.
 This is created for use with the Rust re-write of the [PocketRelay (https://github.com/jacobtread/PocketRelay)](https://github.com/jacobtread/PocketRelay) 
 software.
 
+## Working with structs
 
 ### Creating decodable structs
 In order to read the contents of packets you will need to define structs that 
@@ -80,4 +81,107 @@ group! {
     }
 }
 
+```
+
+This struct can then be used in your packet struct
+
+
+```rust
+use blaze_pk::{packet, group};
+
+group! {
+    struct MyGroup {
+        TEST: u32,
+        STR: String,
+        BLOB: Vec<u8>
+    }
+}
+
+packet! {
+    struct MyPacket {
+        TEST: u32,
+        STR: String,
+        MY: MyGroup
+    }
+}
+```
+
+## Creating packets
+
+### Definining a component enum
+In order to be able to send notify and request packets you will need to have an
+enum for turning Component and Command names into IDs for this you can use the
+`define_components!()` macro
+
+The example usage of this macro is as follows:
+
+```rust
+use blaze_pk::define_components;
+
+define_components! {
+    Authentication (0x0) {
+        First (0x1)
+        Second (0x2)
+        Third (0x3)
+    }
+
+    Other (0x1) {
+        First (0x1)
+        Second (0x2)
+        Third (0x3)
+    }
+}
+```
+
+This will generate a module named "components" with the following enums for you to use
+these enums implement the PacketComponent trait which maps the component and command
+values to these enums.
+
+```rust
+pub mod components {
+    #[derive(Debug, Eq, PartialEq)]
+    pub enum Authentication {
+        First,
+        Second,
+        Third,
+        Unknown(u16),
+    }
+    
+    #[derive(Debug, Eq, PartialEq)]
+    pub enum Other {
+        First,
+        Second,
+        Third,
+        Unknown(u16),
+    }
+}
+```
+
+### Creating a packet
+
+Packets can be created with one of the following functions on the Packets struct. 
+
+| Function | Arguments                                                                                                                  | Description                                           |
+|----------|----------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------|
+| request  | counter (The request counter for ID's), component (A component line the one created earlier), content (The packet content) | Creates a request packet                              |
+| notify   | component (A component line the one created earlier), content (The packet content)                                         | Creates a notification packet                         |
+| response | packet (The packet to respond to), content (The packet content)                                                            | Creates a packet that is responding to another packet |
+| error    | packet (The packet to respond to), error (The error), content (The packet content)                                         | Creates an error packet                               |
+
+> Each of these functions have a variant suffixed with _empty which is a shortcut function 
+> for specifiying one of these packets that has no content.
+
+**Notify Example:**
+
+This will create a Notify packet for the Authentication component with the First command
+
+```rust
+
+use blaze_pk::Packets;
+
+// {Previous Code}
+
+fn create_packet() {
+    let my_packet = Packets::notify_empty(components::Authentication::First);
+}
 ```
