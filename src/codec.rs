@@ -1,9 +1,7 @@
-use crate::tdf::{Tag, ValueType};
+use crate::tdf::ValueType;
 use derive_more::Display;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use std::io;
-use std::io::Read;
-use std::thread::current;
 
 /// Structure for reading over a vec
 /// of bytes using a cursor.
@@ -152,6 +150,8 @@ pub enum CodecError {
     NotEnoughBytes(usize, usize, usize),
     #[display(fmt = "Unknown error occurred when trying to fit bytes")]
     UnknownError,
+    #[display(fmt = "Attempted to decode packet contents twice")]
+    DecodedTwice,
 }
 
 pub type CodecResult<T> = Result<T, CodecError>;
@@ -184,7 +184,7 @@ impl Codec for f32 {
     }
 }
 
-pub trait ReadBytesExt: Read {
+pub trait ReadBytesExt: io::Read {
     #[inline]
     fn read_u16(&mut self) -> io::Result<u16> {
         let mut buffer = [0; 2];
@@ -193,4 +193,4 @@ pub trait ReadBytesExt: Read {
     }
 }
 
-impl<W: Read> ReadBytesExt for W {}
+impl<R: io::Read> ReadBytesExt for R {}

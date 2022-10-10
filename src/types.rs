@@ -1,11 +1,8 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
-use crate::packet::DecodedPacket;
 use crate::tdf::ValueType;
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display, Formatter};
-use std::fs::read;
-use std::hash::Hash;
+use std::fmt::Debug;
 use std::slice::Iter;
 
 pub trait TdfGroup: Codec + Debug {
@@ -15,10 +12,10 @@ pub trait TdfGroup: Codec + Debug {
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarInt(pub u64);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct VarIntList(pub Vec<VarInt>);
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TdfOptional<T: Codec> {
     Some(u8, T),
     None,
@@ -303,7 +300,7 @@ impl Codec for String {
         let bytes = reader.take(length)?;
         let text = String::from_utf8_lossy(bytes);
         let mut text = text.to_string();
-        /// Pop the null terminator from the end of the string
+        // Pop the null terminator from the end of the string
         text.pop();
         Ok(text)
     }
@@ -445,7 +442,6 @@ impl Codec for (VarInt, VarInt, VarInt) {
 #[cfg(test)]
 mod test {
     use crate::types::TdfMap;
-    use std::collections::HashMap;
 
     #[test]
     fn test() {
@@ -453,5 +449,9 @@ mod test {
         map.insert("Test", "Abc");
 
         let value = map.get("Test");
+
+        assert_eq!(value.unwrap(), "Test");
+
+        println!("{value:?}")
     }
 }

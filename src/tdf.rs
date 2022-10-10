@@ -1,10 +1,6 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
-use crate::packet::DecodedPacket;
-use crate::types::{MapKey, TdfMap, TdfOptional, VarInt, VarIntList, EMPTY_OPTIONAL};
-use linked_hash_map::LinkedHashMap;
-use std::borrow::Cow;
+use crate::types::{VarInt, VarIntList, EMPTY_OPTIONAL};
 use std::fmt::Debug;
-use std::fs::read;
 
 use derive_more::Display;
 
@@ -34,12 +30,9 @@ impl Tag {
                         }
 
                         return Ok(read_tag);
-                    } else {
-                        println!("Hit non matching {:?}", read_tag)
                     }
                 }
                 Err(CodecError::NotEnoughBytes(_, _, _)) => {
-                    println!("ran out of bytes");
                     return Err(CodecError::MissingField(tag));
                 }
                 Err(err) => return Err(err),
@@ -163,7 +156,6 @@ impl Codec for Tag {
             .take(4)?
             .try_into()
             .map_err(|_| CodecError::UnknownError)?;
-        println!("{tag:?}");
 
         let value_type = ValueType::from_value(tag[3]);
         let mut output: [u8; 4] = [0, 0, 0, 0];

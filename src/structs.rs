@@ -1,9 +1,41 @@
-use crate::codec::{Codec, Reader};
-use crate::tdf::{Tag, ValueType};
-use crate::types::{TdfMap, TdfOptional, VarInt, VarIntList};
-
 /// Macro for generating structures that can be encoded and decoded from bytes
 /// (DONT USE THIS FOR GROUPS USE `tdf_group` because they require extra bytes)
+///
+/// You can only use types that implement Codec the ones implemented
+/// by this library are
+///
+/// *Any = Any of the following types
+///
+/// VarInt
+/// String
+/// Vec<u8>
+/// Group (Creates with group macro)
+/// Vec<String | VarInt | Float | Group>
+/// TdfMap<String | VarInt, *Any>
+/// TdfOptional<*Any>
+/// VarIntList
+/// (VarInt, VarInt)
+/// (VarInt, VarInt, VarInt)
+///
+/// *All field names must be in caps and no longer than 4 chars*
+///
+/// Example Usage
+/// ```
+///
+/// use blaze_pk::packet;
+/// packet! {
+///     struct Test {
+///         TEST: VarInt,
+///         ALT: String,
+///         BYT: Vec<u8>
+///     }
+/// }
+///
+/// ```
+///
+/// Generated structs can then be used as packet body's when
+/// creating packets
+///
 #[macro_export]
 macro_rules! packet {
     (
@@ -20,6 +52,8 @@ macro_rules! packet {
             $($field: $ty),*
         }
 
+        impl $crate::packet::PacketContent for $name {}
+
         impl $crate::codec::Codec for $name {
 
             #[allow(non_snake_case)]
@@ -33,11 +67,9 @@ macro_rules! packet {
             #[allow(non_snake_case)]
             fn decode(reader: &mut $crate::codec::Reader) -> $crate::codec::CodecResult<Self>  {
                 $(
-                    println!("Read: {}", stringify!($field));
                     $crate::tdf::Tag::expect_tag(stringify!($field), &(<$ty>::value_type()), reader)?;
                     let $field = <$ty>::decode(reader)
                         .map_err(|err|$crate::codec::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
-                    println!("Read Done: {:?} Cursor: {}", $field, reader.cursor());
                 )*
                 Ok(Self {
                     $($field),*
@@ -145,7 +177,6 @@ macro_rules! group {
 mod test {
     use crate::codec::{Codec, Reader};
     use crate::types::{TdfMap, TdfOptional, VarInt, VarIntList};
-    use std::fs::read;
 
     packet! {
         struct TestStruct {
@@ -198,13 +229,18 @@ mod test {
             AM: (VarInt(255), VarInt(6000), VarInt(6743)),
         };
 
-        let mut out = str.encode_bytes();
-        let a: Option<String> = None;
+        let out = str.encode_bytes();
 
         println!("{out:?}");
 
         let mut reader = Reader::new(&out);
         let str_out = TestStruct::decode(&mut reader).unwrap();
-        println!("{str_out:?}")
+        println!("{str_out:?}");
+
+        assert_eq!(str.AB, str_out.AB);
+        assert_eq!(str.AC, str_out.AC);
+        assert_eq!(str.AD, str_out.AD);
+        assert_eq!(str.AB, str_out.AB);
+        assert_eq!(str.AB, str_out.AB);
     }
 }
