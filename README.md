@@ -1,6 +1,8 @@
 # ⚙️BlazePK
 
 ![License](https://img.shields.io/github/license/jacobtread/BlazePk-rs?style=for-the-badge)
+![Cargo Version](https://img.shields.io/crates/v/blaze-pk?style=for-the-badge)
+![Cargo Downloads](https://img.shields.io/crates/d/blaze-pk?style=for-the-badge)
 
 Rust library for working with the Blaze packet system this is the networking solution used by games such as
 Mass Effect 3, Battlefield 3, another Other EA games. 
