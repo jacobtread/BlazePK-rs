@@ -36,20 +36,21 @@ the following table lists the following
 > The types u8 - u64 and i8 - i64 are cast to u64 and encoded using the VarInt encoding
 
 
-| Type                                 | Details                               |
-|--------------------------------------|---------------------------------------|
-| u8, u16, u32, u64, i8, i16, i32, i64 | Converted to VarInt                   |
-| VarInt                               | Variable length integer value         |
-| String                               | Text encoded will a null terminator   |
-| Vec\<u8>                             | Blob of bytes                         |
-| Group                                | Group created with the group!() macro |
-| Vec<String,VarInt,Float,Group>       | List of values                        |
-| TdfMap<String,VarInt, Any*>          | Map of keys to values                 |
-| TdfOptional<Any*>                    | Tdf value where value could be absent |
-| VarIntList                           | List of variable length integers      |
-| (VarInt, VarInt)                     | Pair of two VarInts                   |
-| (VarInt, VarInt, VarInt)             | Tuple of three VarInts                |
-| f32                                  | Only floating point type supported    |
+| Type                                 | Details                                         |
+|--------------------------------------|-------------------------------------------------|
+| u8, u16, u32, u64, i8, i16, i32, i64 | Converted to VarInt                             |
+| VarInt                               | Variable length integer value                   |
+| String                               | Text encoded will a null terminator             |
+| Vec\<u8>                             | Blob of bytes                                   |
+| Group                                | Group created with the group!() macro           |
+| Vec<String,VarInt,Float,Group>       | List of values                                  |
+| TdfMap<String,VarInt, Any*>          | Map of keys to values                           |
+| TdfOptional<Any*>                    | Tdf value where value could be absent           |
+| VarIntList                           | List of variable length integers                |
+| (VarInt, VarInt)                     | Pair of two VarInts                             |
+| (VarInt, VarInt, VarInt)             | Tuple of three VarInts                          |
+| f32                                  | Only floating point type supported              |
+| bool                                 | Booleans are VarInts encoded with Zeros or Ones |
 
 
 ```rust

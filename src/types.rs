@@ -118,6 +118,13 @@ impl<T: Codec> TdfOptional<T> {
     pub fn is_none(&self) -> bool {
         matches!(self, Self::None)
     }
+
+    /// Function for choosing a some value with a
+    /// default type
+    #[inline]
+    pub fn default_some(tag: &str, value: T) -> TdfOptional<T> {
+        TdfOptional::Some(0, (tag.to_string(), value))
+    }
 }
 
 pub const EMPTY_OPTIONAL: u8 = 0x7F;
@@ -368,6 +375,21 @@ impl<T: AsVarInt + Copy> Codec for T {
     }
 }
 
+impl Codec for bool {
+    fn encode(&self, output: &mut Vec<u8>) {
+        output.push(if *self { 1 } else { 0 })
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        let byte = reader.take_one()?;
+        Ok(byte == 1)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
 impl Codec for VarInt {
     fn encode(&self, output: &mut Vec<u8>) {
         let value = self.0;
@@ -459,6 +481,7 @@ impl Codec for Vec<u8> {
 /// Trait for a Codec value which can be apart of a Tdf list
 pub trait Listable: Codec {}
 
+impl Listable for bool {}
 impl Listable for VarInt {}
 impl Listable for String {}
 impl Listable for (VarInt, VarInt, VarInt) {}
