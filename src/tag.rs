@@ -56,6 +56,8 @@ impl Tag {
                         }
 
                         return Ok(read_tag);
+                    } else {
+                        Self::discard_type(&read_tag.1, reader)?;
                     }
                 }
                 Err(CodecError::NotEnoughBytes(_, _, _)) => {
@@ -290,5 +292,22 @@ mod test {
         let mut reader = Reader::new(&out);
         let tag = Tag::decode(&mut reader).unwrap();
         assert_eq!(tag_in, tag)
+    }
+
+    #[test]
+    fn test_tag() {
+        let mut tag_out = Tag(String::from("PORT"), ValueType::VarInt);
+        let mut out = Vec::new();
+        tag_out.encode(&mut out);
+        println!("{out:?}")
+    }
+
+    #[test]
+    fn parse_tag() {
+        let tag = [226, 75, 179, 0];
+        let mut reader = Reader::new(&tag);
+        let tag = Tag::decode(&mut reader);
+
+        print!("{tag:?}")
     }
 }
