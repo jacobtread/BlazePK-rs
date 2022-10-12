@@ -163,7 +163,7 @@ impl PacketHeader {
 /// Structure for a packet created by ourselves where
 /// the data contents are already known and not encoded
 #[derive(Debug)]
-pub struct Packet<C: PacketContent>(PacketHeader, C);
+pub struct Packet<C: PacketContent>(pub PacketHeader, pub C);
 
 /// Structure for storing functions related to creation of packets
 pub struct Packets {}
