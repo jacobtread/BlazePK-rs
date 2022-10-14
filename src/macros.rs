@@ -221,22 +221,25 @@ macro_rules! define_components {
     ) => {
         #[derive(Debug, Eq, PartialEq)]
         pub enum Components {
-            $($component,)*
-            Unknown(u16)
+            $($component($component),)*
+            Unknown(u16, u16)
         }
 
         impl $crate::PacketComponents for Components {
 
-            fn component(&self) -> u16 {
+
+            fn values(&self) {
                 match self {
-                    $(Self::$command => $command_value,)*
-                    Self::Unknown(value) => *value,
+                    $(
+                        Self::$component(command) => ($component_value, command.command()),
+                    )*
+                    Self::Unknown(a, b) => (*a, *b),
                 }
             }
 
-            fn from_value(value: u16) -> Self {
+            fn from_values(component: u16, command: u16, notify: bool) -> Self {
                 match value {
-                    $($command_value => Self::$command,)*
+                    $($command_value => Self::$command($command::from_value(command, notify)),)*
                     Self::Unknown(value) => *value,
                 }
             }
@@ -251,11 +254,6 @@ macro_rules! define_components {
             }
 
             impl $crate::PacketComponent for $component {
-
-                fn component(&self) -> u16 {
-                    $component_value
-                }
-
                 fn command(&self) -> u16 {
                     match self {
                         $(Self::$command => $command_value,)*

@@ -50,17 +50,15 @@ pub trait PacketContent: Codec + Debug {}
 
 /// Trait for implementing packet target details
 pub trait PacketComponent: Debug + Eq + PartialEq {
-    fn component(&self) -> u16;
-
     fn command(&self) -> u16;
 
     fn from_value(value: u16, notify: bool) -> Self;
 }
 
 pub trait PacketComponents: Debug + Eq + PartialEq {
-    fn component(&self) -> u16;
+    fn values(&self) -> (u16, u16);
 
-    fn from_value(value: u16) -> Self;
+    fn from_values(component: u16, command: u16, notify: bool) -> Self;
 }
 
 /// The different types of packets
@@ -243,11 +241,12 @@ impl Packets {
 
     /// Creates a new notify packet with the provided component and command
     /// and `contents`
-    pub fn notify<C: PacketContent>(component: impl PacketComponent, contents: C) -> Packet<C> {
+    pub fn notify<C: PacketContent, T: PacketComponents>(component: T, contents: C) -> Packet<C> {
+        let (component, command) = component.values();
         Packet(
             PacketHeader {
-                component: component.component(),
-                command: component.command(),
+                component,
+                command,
                 error: 0,
                 ty: PacketType::Notify,
                 id: 0,
@@ -257,21 +256,22 @@ impl Packets {
     }
     /// Shortcut function for creating a notify packet with no content
     #[inline]
-    pub fn notify_empty(component: impl PacketComponent) -> Packet<EmptyContent> {
+    pub fn notify_empty<T: PacketComponents>(component: T) -> Packet<EmptyContent> {
         Self::notify(component, EmptyContent {})
     }
 
     /// Creates a new request packet retrieving its ID from the provided
     /// request counter.
-    pub fn request<R: RequestCounter, C: PacketContent>(
+    pub fn request<R: RequestCounter, C: PacketContent, T: PacketComponents>(
         counter: &mut R,
-        component: impl PacketComponent,
+        component: T,
         contents: C,
     ) -> Packet<C> {
+        let (component, command) = component.values();
         Packet(
             PacketHeader {
-                component: component.component(),
-                command: component.command(),
+                component,
+                command,
                 error: 0,
                 ty: PacketType::Request,
                 id: counter.next(),
@@ -298,6 +298,23 @@ impl<C: PacketContent> Packet<C> {
 
     /// Reads a packet from the provided input and parses the
     /// contents
+    pub fn read_typed<T: PacketComponents, R: Read>(input: &mut R) -> PacketResult<(T, C)>
+    where
+        Self: Sized,
+    {
+        let packet = Self::read(input)?;
+        let header = packet.0;
+
+        let t = T::from_values(
+            header.component,
+            header.component,
+            matches!(header.ty, PacketType::Notify),
+        );
+        Ok((t, packet.1))
+    }
+
+    /// Reads a packet from the provided input and parses the
+    /// contents
     #[cfg(feature = "async")]
     pub async fn read_async<R: AsyncRead>(input: &mut R) -> PacketResult<Packet<C>>
     where
@@ -309,6 +326,24 @@ impl<C: PacketContent> Packet<C> {
         let mut reader = Reader::new(&contents);
         let contents = C::decode(&mut reader)?;
         Ok(Packet(header, contents))
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn read_typed_async<T: PacketComponents, R: AsyncRead>(
+        input: &mut R,
+    ) -> PacketResult<(T, C)>
+    where
+        Self: Sized,
+    {
+        let packet = Self::read_async(input).await?;
+        let header = packet.0;
+
+        let t = T::from_values(
+            header.component,
+            header.component,
+            matches!(header.ty, PacketType::Notify),
+        );
+        Ok((t, packet.1))
     }
 
     /// Handles writing the header and contents of this packet to
