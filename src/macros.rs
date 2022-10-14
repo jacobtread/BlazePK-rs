@@ -219,57 +219,76 @@ macro_rules! define_components {
             }
         )*
     ) => {
+        #[derive(Debug, Eq, PartialEq)]
+        pub enum Components {
+            $($component,)*
+            Unknown(u16)
+        }
 
+        impl $crate::PacketComponents for Components {
 
-        pub mod components {
-            $(
-                #[derive(Debug, Eq, PartialEq)]
-                pub enum $component {
-                    $($command,)*
-                    $($($command_notify,)*)?
-                    Unknown(u16)
+            fn component(&self) -> u16 {
+                match self {
+                    $(Self::$command => $command_value,)*
+                    Self::Unknown(value) => *value,
                 }
-
-                impl $crate::PacketComponent for $component {
-
-                    fn component(&self) -> u16 {
-                        $component_value
-                    }
-
-                    fn command(&self) -> u16 {
-                        match self {
-                            $(Self::$command => $command_value,)*
-                            $(
-                                $(Self::$command_notify => $command_notify_value,)*
-                            )?
-                            Self::Unknown(value) => *value,
-                        }
-                    }
-
-                    fn from_value(value: u16, notify: bool) -> Self {
-                        if notify {
-                            match value {
-                                $($($command_notify_value => Self::$command_notify,)*)?
-                                value => Self::Unknown(value)
-                            }
-                        } else  {
-                            match value {
-                                $($command_value => Self::$command,)*
-                                value => Self::Unknown(value)
-                            }
-                        }
-                    }
-                }
-            )*
-
-            pub fn resolve(component: u16, command: u16, notify: bool) -> Option<Box<dyn PacketComponent>> {
-                Box::new(Some(match component {
-                    $(
-                        $component_value => $component::from_value(command, notify),
-                    )*
-                    _ => return None
-                }))
             }
+
+            fn from_value(value: u16) -> Self {
+                match value {
+                    $($command_value => Self::$command,)*
+                    Self::Unknown(value) => *value,
+                }
+            }
+        }
+
+        $(
+            #[derive(Debug, Eq, PartialEq)]
+            pub enum $component {
+                $($command,)*
+                $($($command_notify,)*)?
+                Unknown(u16)
+            }
+
+            impl $crate::PacketComponent for $component {
+
+                fn component(&self) -> u16 {
+                    $component_value
+                }
+
+                fn command(&self) -> u16 {
+                    match self {
+                        $(Self::$command => $command_value,)*
+                        $(
+                            $(Self::$command_notify => $command_notify_value,)*
+                        )?
+                        Self::Unknown(value) => *value,
+                    }
+                }
+
+                fn from_value(value: u16, notify: bool) -> Self {
+                    if notify {
+                        match value {
+                            $($($command_notify_value => Self::$command_notify,)*)?
+                            value => Self::Unknown(value)
+                        }
+                    } else  {
+                        match value {
+                            $($command_value => Self::$command,)*
+                            value => Self::Unknown(value)
+                        }
+                    }
+                }
+            }
+        )*
+
+        pub fn resolve(component: u16, command: u16, notify: bool) -> Option<Box<dyn PacketComponent>> {
+            Box::new(Some(match component {
+                $(
+                    $component_value => $component::from_value(command, notify),
+                )*
+                _ => return None
+            }))
         }
     };
 }
@@ -278,6 +297,14 @@ macro_rules! define_components {
 mod test {
     use crate::{Codec, Reader};
     use crate::{TdfMap, TdfOptional, VarInt, VarIntList};
+
+    define_components! {
+        Authentication (0x1) {
+
+            SuperLongNameThisIs (0x2)
+
+        }
+    }
 
     packet! {
         struct TestStruct {

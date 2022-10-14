@@ -1,6 +1,6 @@
 [package]
 name = "blaze-pk"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2021"
 description = "Rust library for blaze packet system"
 license = "MIT"
@@ -15,3 +15,8 @@ categories = ["network-programming", "parser-implementations"]
 maintenance = { status = "experimental" }
 
 [dependencies]
+tokio = { version = "1", features = ["full"], optional = true }
+
+[features]
+default = []
+async = ["tokio"]

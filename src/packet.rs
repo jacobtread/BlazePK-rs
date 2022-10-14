@@ -4,6 +4,9 @@ use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU16, Ordering};
 
+#[cfg(feature = "async")]
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+
 /// Enum for errors that could occur when dealing with packets
 /// (encoding and decoding)
 #[derive(Debug)]
@@ -52,6 +55,12 @@ pub trait PacketComponent: Debug + Eq + PartialEq {
     fn command(&self) -> u16;
 
     fn from_value(value: u16, notify: bool) -> Self;
+}
+
+pub trait PacketComponents: Debug + Eq + PartialEq {
+    fn component(&self) -> u16;
+
+    fn from_value(value: u16) -> Self;
 }
 
 /// The different types of packets
@@ -145,6 +154,36 @@ impl PacketHeader {
         if q_type & 0x10 != 0 {
             let mut buffer = [0; 2];
             input.read_exact(&mut buffer)?;
+            let ext_length = u16::from_be_bytes(buffer);
+            length += (ext_length as usize) << 16;
+        }
+        let ty = PacketType::from_value(q_type);
+        let header = PacketHeader {
+            component,
+            command,
+            error,
+            ty,
+            id,
+        };
+        Ok((header, length))
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn read_async<R: AsyncRead>(input: &mut R) -> PacketResult<(PacketHeader, usize)>
+    where
+        Self: Sized,
+    {
+        let mut header = [0u8; 12];
+        input.read_exact(&mut header).await?;
+        let mut length = decode_u16(&header[0..2])? as usize;
+        let component = decode_u16(&header[2..4])?;
+        let command = decode_u16(&header[4..6])?;
+        let error = decode_u16(&header[6..8])?;
+        let q_type = decode_u16(&header[8..10])?;
+        let id = decode_u16(&header[10..12])?;
+        if q_type & 0x10 != 0 {
+            let mut buffer = [0; 2];
+            input.read_exact(&mut buffer).await?;
             let ext_length = u16::from_be_bytes(buffer);
             length += (ext_length as usize) << 16;
         }
@@ -257,6 +296,21 @@ impl<C: PacketContent> Packet<C> {
         Ok(Packet(header, contents))
     }
 
+    /// Reads a packet from the provided input and parses the
+    /// contents
+    #[cfg(feature = "async")]
+    pub async fn read_async<R: AsyncRead>(input: &mut R) -> PacketResult<Packet<C>>
+    where
+        Self: Sized,
+    {
+        let (header, length) = PacketHeader::read_async(input).await?;
+        let mut contents = vec![0u8; length];
+        input.read_exact(&mut contents).await?;
+        let mut reader = Reader::new(&contents);
+        let contents = C::decode(&mut reader)?;
+        Ok(Packet(header, contents))
+    }
+
     /// Handles writing the header and contents of this packet to
     /// the Writable object
     pub fn write<W: Write>(&self, output: &mut W) -> io::Result<()>
@@ -267,6 +321,20 @@ impl<C: PacketContent> Packet<C> {
         let header = self.0.encode_bytes(content.len());
         output.write_all(&header)?;
         output.write_all(&content)?;
+        Ok(())
+    }
+
+    /// Handles writing the header and contents of this packet to
+    /// the Writable object
+    #[cfg(feature = "async")]
+    pub async fn write_async<W: AsyncWrite>(&self, output: &mut W) -> io::Result<()>
+    where
+        Self: Sized,
+    {
+        let content = self.1.encode_bytes();
+        let header = self.0.encode_bytes(content.len());
+        output.write_all(&header).await?;
+        output.write_all(&content).await?;
         Ok(())
     }
 }
@@ -302,6 +370,19 @@ impl OpaquePacket {
         let (header, length) = PacketHeader::read(input)?;
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents)?;
+        Ok(Self(header, contents))
+    }
+
+    /// Reads a packet from the provided input without parsing
+    /// the contents of the packet
+    #[cfg(feature = "async")]
+    pub async fn read_async<R: AsyncRead>(input: &mut R) -> PacketResult<Self>
+    where
+        Self: Sized,
+    {
+        let (header, length) = PacketHeader::read_async(input).await?;
+        let mut contents = vec![0u8; length];
+        input.read_exact(&mut contents).await?;
         Ok(Self(header, contents))
     }
 }
