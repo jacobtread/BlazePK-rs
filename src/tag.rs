@@ -103,14 +103,30 @@ impl Tag {
                 let value = <Vec<u8>>::decode(reader)?;
                 println!("Blob: {value:?}");
             }
-            ValueType::Group => Self::discard_group(reader)?,
+            ValueType::Group => {
+                println!("Start group");
+                while let Ok(next_byte) = reader.take_one() {
+                    if next_byte == 0 {
+                        break;
+                    }
+                    if next_byte != 2 {
+                        reader.step_back();
+                    }
+                    let tag = Tag::decode(reader)?;
+                    println!("{tag:?}");
+                    Self::debug_discard_type(&tag.1, reader)?;
+                }
+                println!("End group");
+            }
             ValueType::List => {
                 let new_ty = ValueType::decode(reader)?;
                 println!("List Type: {new_ty:?}");
                 let length = VarInt::decode(reader)?.0 as usize;
+                println!("STart list");
                 for _ in 0..length {
                     Self::debug_discard_type(&new_ty, reader)?;
                 }
+                println!("End list")
             }
             ValueType::Map => {
                 let key_ty = ValueType::decode(reader)?;

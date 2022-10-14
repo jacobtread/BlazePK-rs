@@ -207,7 +207,7 @@ macro_rules! define_components {
                     $command:ident ($command_value:literal)
                 )*
 
-                $(
+                $(;
                     notify {
 
                         $(
@@ -228,7 +228,7 @@ macro_rules! define_components {
         impl $crate::PacketComponents for Components {
 
 
-            fn values(&self) {
+            fn values(&self)-> (u16, u16) {
                 match self {
                     $(
                         Self::$component(command) => ($component_value, command.command()),
@@ -238,9 +238,9 @@ macro_rules! define_components {
             }
 
             fn from_values(component: u16, command: u16, notify: bool) -> Self {
-                match value {
-                    $($command_value => Self::$command($command::from_value(command, notify)),)*
-                    Self::Unknown(value) => *value,
+                match component {
+                    $($component_value => Self::$component($component::from_value(command, notify)),)*
+                    _ => Self::Unknown(component, command),
                 }
             }
         }
@@ -279,15 +279,6 @@ macro_rules! define_components {
                 }
             }
         )*
-
-        pub fn resolve(component: u16, command: u16, notify: bool) -> Option<Box<dyn PacketComponent>> {
-            Box::new(Some(match component {
-                $(
-                    $component_value => $component::from_value(command, notify),
-                )*
-                _ => return None
-            }))
-        }
     };
 }
 

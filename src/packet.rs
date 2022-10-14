@@ -168,7 +168,9 @@ impl PacketHeader {
     }
 
     #[cfg(feature = "async")]
-    pub async fn read_async<R: AsyncRead>(input: &mut R) -> PacketResult<(PacketHeader, usize)>
+    pub async fn read_async<R: AsyncRead + Unpin>(
+        input: &mut R,
+    ) -> PacketResult<(PacketHeader, usize)>
     where
         Self: Sized,
     {
@@ -317,7 +319,7 @@ impl<C: PacketContent> Packet<C> {
     /// Reads a packet from the provided input and parses the
     /// contents
     #[cfg(feature = "async")]
-    pub async fn read_async<R: AsyncRead>(input: &mut R) -> PacketResult<Packet<C>>
+    pub async fn read_async<R: AsyncRead + Unpin>(input: &mut R) -> PacketResult<Packet<C>>
     where
         Self: Sized,
     {
@@ -330,7 +332,7 @@ impl<C: PacketContent> Packet<C> {
     }
 
     #[cfg(feature = "async")]
-    pub async fn read_typed_async<T: PacketComponents, R: AsyncRead>(
+    pub async fn read_typed_async<T: PacketComponents, R: AsyncRead + Unpin>(
         input: &mut R,
     ) -> PacketResult<(T, C)>
     where
@@ -363,7 +365,7 @@ impl<C: PacketContent> Packet<C> {
     /// Handles writing the header and contents of this packet to
     /// the Writable object
     #[cfg(feature = "async")]
-    pub async fn write_async<W: AsyncWrite>(&self, output: &mut W) -> io::Result<()>
+    pub async fn write_async<W: AsyncWrite + Unpin>(&self, output: &mut W) -> io::Result<()>
     where
         Self: Sized,
     {
@@ -434,7 +436,7 @@ impl OpaquePacket {
     /// Reads a packet from the provided input without parsing
     /// the contents of the packet
     #[cfg(feature = "async")]
-    pub async fn read_async<R: AsyncRead>(input: &mut R) -> PacketResult<Self>
+    pub async fn read_async<R: AsyncRead + Unpin>(input: &mut R) -> PacketResult<Self>
     where
         Self: Sized,
     {
@@ -447,7 +449,7 @@ impl OpaquePacket {
     /// Reads a packet from the provided input without parsing
     /// the contents of the packet
     #[cfg(feature = "async")]
-    pub async fn read_async_typed<R: AsyncRead, T: PacketComponents>(
+    pub async fn read_async_typed<T: PacketComponents, R: AsyncRead + Unpin>(
         input: &mut R,
     ) -> PacketResult<(T, Self)>
     where
