@@ -51,7 +51,7 @@ pub trait PacketComponent: Debug + Eq + PartialEq {
 
     fn command(&self) -> u16;
 
-    fn from_value(value: u16) -> Self;
+    fn from_value(value: u16, notify: bool) -> Self;
 }
 
 /// The different types of packets

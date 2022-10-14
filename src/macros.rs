@@ -206,6 +206,16 @@ macro_rules! define_components {
                 $(
                     $command:ident ($command_value:literal)
                 )*
+
+                $(
+                    notify {
+
+                        $(
+                            $command_notify:ident ($command_notify_value:literal)
+                        )*
+
+                    }
+                )?
             }
         )*
     ) => {
@@ -215,7 +225,8 @@ macro_rules! define_components {
             $(
                 #[derive(Debug, Eq, PartialEq)]
                 pub enum $component {
-                    $($command),*,
+                    $($command,)*
+                    $($($command_notify,)*)?
                     Unknown(u16)
                 }
 
@@ -227,19 +238,38 @@ macro_rules! define_components {
 
                     fn command(&self) -> u16 {
                         match self {
-                            $(Self::$command => $command_value),*,
+                            $(Self::$command => $command_value,)*
+                            $(
+                                $(Self::$command_notify => $command_notify_value,)*
+                            )?
                             Self::Unknown(value) => *value,
                         }
                     }
 
-                    fn from_value(value: u16) -> Self {
-                        match value {
-                            $($command_value => Self::$command),*,
-                            value => Self::Unknown(value)
+                    fn from_value(value: u16, notify: bool) -> Self {
+                        if notify {
+                            match value {
+                                $($($command_notify_value => Self::$command_notify,)*)?
+                                value => Self::Unknown(value)
+                            }
+                        } else  {
+                            match value {
+                                $($command_value => Self::$command,)*
+                                value => Self::Unknown(value)
+                            }
                         }
                     }
                 }
             )*
+
+            pub fn resolve(component: u16, command: u16, notify: bool) -> Option<Box<dyn PacketComponent>> {
+                Box::new(Some(match component {
+                    $(
+                        $component_value => $component::from_value(command, notify),
+                    )*
+                    _ => return None
+                }))
+            }
         }
     };
 }
