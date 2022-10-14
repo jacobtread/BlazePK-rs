@@ -78,15 +78,77 @@ impl Tag {
         Ok(())
     }
 
-    /// Discards any remaining tags in the group to exhaust the
-    /// remaining bytes until the group ending byte
-    pub fn discard_group(reader: &mut Reader) -> CodecResult<()> {
-        while let Ok(next_byte) = reader.take_one() {
-            if next_byte == 0 {
-                break;
+    /// Discards everything printing out everything it hits
+    pub fn debug_discard(reader: &mut Reader) -> CodecResult<()> {
+        while reader.remaining() > 0 {
+            let tag = Tag::decode(reader)?;
+            println!("{tag:?}");
+            Self::debug_discard_type(&tag.1, reader)?;
+        }
+        Ok(())
+    }
+
+    /// Discards a type printing out everything it hits
+    fn debug_discard_type(ty: &ValueType, reader: &mut Reader) -> CodecResult<()> {
+        match ty {
+            ValueType::VarInt => {
+                let value = VarInt::decode(reader)?;
+                println!("VarInt: {value:?}");
             }
-            reader.step_back();
-            Self::discard_tag(reader)?;
+            ValueType::String => {
+                let value = String::decode(reader)?;
+                println!("String: {value:?}");
+            }
+            ValueType::Blob => {
+                let value = <Vec<u8>>::decode(reader)?;
+                println!("Blob: {value:?}");
+            }
+            ValueType::Group => Self::discard_group(reader)?,
+            ValueType::List => {
+                let new_ty = ValueType::decode(reader)?;
+                println!("List Type: {new_ty:?}");
+                let length = VarInt::decode(reader)?.0 as usize;
+                for _ in 0..length {
+                    Self::debug_discard_type(&new_ty, reader)?;
+                }
+            }
+            ValueType::Map => {
+                let key_ty = ValueType::decode(reader)?;
+                println!("Map Key Type: {key_ty:?}");
+                let value_ty = ValueType::decode(reader)?;
+                println!("Map Value Type: {value_ty:?}");
+                let length = VarInt::decode(reader)?.0 as usize;
+                for _ in 0..length {
+                    Self::debug_discard_type(&key_ty, reader)?;
+                    Self::debug_discard_type(&value_ty, reader)?;
+                }
+            }
+            ValueType::Optional => {
+                let ty = reader.take_one()?;
+                println!("Optional Type {ty}");
+                if ty != EMPTY_OPTIONAL {
+                    let new_ty = ValueType::decode(reader)?;
+                    println!("Optional Value {new_ty:?}");
+                    Self::debug_discard_type(&new_ty, reader)?;
+                }
+            }
+            ValueType::VarIntList => {
+                let list = VarIntList::decode(reader)?;
+                println!("VarIntList {list:?}");
+            }
+            ValueType::Pair => {
+                let pair = <(VarInt, VarInt)>::decode(reader)?;
+                println!("Pair {pair:?}");
+            }
+            ValueType::Triple => {
+                let value = <(VarInt, VarInt, VarInt)>::decode(reader)?;
+                println!("Triple {value:?}")
+            }
+            ValueType::Float => {
+                let value = f32::decode(reader)?;
+                println!("Float {value:?}")
+            }
+            ValueType::Unknown(_) => {}
         }
         Ok(())
     }
@@ -132,6 +194,19 @@ impl Tag {
             ValueType::Float => f32::skip(reader)?,
             ValueType::Unknown(_) => {}
         };
+        Ok(())
+    }
+
+    /// Discards any remaining tags in the group to exhaust the
+    /// remaining bytes until the group ending byte
+    pub fn discard_group(reader: &mut Reader) -> CodecResult<()> {
+        while let Ok(next_byte) = reader.take_one() {
+            if next_byte == 0 {
+                break;
+            }
+            reader.step_back();
+            Self::discard_tag(reader)?;
+        }
         Ok(())
     }
 

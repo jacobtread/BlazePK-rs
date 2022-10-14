@@ -4,6 +4,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicU16, Ordering};
 
+use crate::Tag;
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -394,6 +395,13 @@ impl OpaquePacket {
     pub fn contents<R: PacketContent>(&self) -> CodecResult<R> {
         let mut reader = Reader::new(&self.1);
         R::decode(&mut reader)
+    }
+
+    /// Debug decoding decodes self printing all the hit nodes
+    pub fn debug_decode(&self) -> CodecResult<()> {
+        let mut reader = Reader::new(&self.1);
+        Tag::debug_discard(&mut reader)?;
+        Ok(())
     }
 
     /// Reads a packet from the provided input without parsing
