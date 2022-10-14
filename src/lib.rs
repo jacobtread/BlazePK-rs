@@ -10,7 +10,7 @@ mod types;
 pub use codec::{Codec, CodecError, CodecResult, Reader};
 pub use packet::{
     AtomicCounter, OpaquePacket, Packet, PacketComponent, PacketComponents, PacketContent,
-    PacketError, PacketResult, Packets, RequestCounter, SimpleCounter,
+    PacketError, PacketResult, PacketType, Packets, RequestCounter, SimpleCounter,
 };
 pub use tag::{Tag, ValueType};
 pub use types::{Listable, TdfMap, TdfOptional, VarInt, VarIntList, EMPTY_OPTIONAL};

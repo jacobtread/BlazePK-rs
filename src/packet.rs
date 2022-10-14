@@ -408,6 +408,21 @@ impl OpaquePacket {
         Ok(Self(header, contents))
     }
 
+    pub fn read_typed<R: Read, T: PacketComponents>(input: &mut R) -> PacketResult<(T, Self)>
+    where
+        Self: Sized,
+    {
+        let (header, length) = PacketHeader::read(input)?;
+        let mut contents = vec![0u8; length];
+        input.read_exact(&mut contents)?;
+        let component = T::from_values(
+            *&header.component,
+            *&header.command,
+            matches!(&header.ty, PacketType::Notify),
+        );
+        Ok((component, Self(header, contents)))
+    }
+
     /// Reads a packet from the provided input without parsing
     /// the contents of the packet
     #[cfg(feature = "async")]
@@ -419,6 +434,26 @@ impl OpaquePacket {
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents).await?;
         Ok(Self(header, contents))
+    }
+
+    /// Reads a packet from the provided input without parsing
+    /// the contents of the packet
+    #[cfg(feature = "async")]
+    pub async fn read_async_typed<R: AsyncRead, T: PacketComponents>(
+        input: &mut R,
+    ) -> PacketResult<(T, Self)>
+    where
+        Self: Sized,
+    {
+        let (header, length) = PacketHeader::read_async(input).await?;
+        let mut contents = vec![0u8; length];
+        input.read_exact(&mut contents).await?;
+        let component = T::from_values(
+            *&header.component,
+            *&header.command,
+            matches!(&header.ty, PacketType::Notify),
+        );
+        Ok((component, Self(header, contents)))
     }
 }
 
