@@ -132,8 +132,29 @@ pub const EMPTY_OPTIONAL: u8 = 0x7F;
 /// Trait implemented by types that can be map keys
 pub trait MapKey: PartialEq + Eq + Debug + Codec {}
 
+impl MapKey for &'static str {}
 impl MapKey for String {}
 impl MapKey for VarInt {}
+
+#[derive(Debug, Clone)]
+pub struct TdfMapBuilder<K: MapKey, V: Codec> {
+    /// The keys stored in this builder
+    keys: Vec<K>,
+    /// The values stored in this builder
+    values: Vec<V>,
+}
+
+impl<K: MapKey, V: Codec> TdfMapBuilder<K, V> {
+    pub fn add(mut self, key: impl Into<K>, value: impl Into<V>) -> Self {
+        self.keys.push(key.into());
+        self.values.push(value.into());
+        self
+    }
+
+    pub fn build(self) -> TdfMap<K, V> {
+        TdfMap::from_existing(self.keys, self.values)
+    }
+}
 
 /// Structure for Tdf maps these are maps that are created
 /// from two Vec so they retain insertion order but are slow
@@ -216,6 +237,13 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
     /// Creates a new empty TdfMap
     pub fn new() -> TdfMap<K, V> {
         Self {
+            keys: Vec::new(),
+            values: Vec::new(),
+        }
+    }
+
+    pub fn build() -> TdfMapBuilder<K, V> {
+        TdfMapBuilder {
             keys: Vec::new(),
             values: Vec::new(),
         }
@@ -433,6 +461,26 @@ impl Codec for VarInt {
 
     fn value_type() -> ValueType {
         ValueType::VarInt
+    }
+}
+
+impl Codec for &'static str {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let mut bytes = self.as_bytes().to_vec();
+        match bytes.last() {
+            // Ignore if already null terminated
+            Some(0) => {}
+            // Null terminate
+            _ => bytes.push(0),
+        }
+
+        VarInt::encode(&VarInt(bytes.len() as u64), output);
+        output.extend_from_slice(&bytes);
+    }
+
+    fn decode(_reader: &mut Reader) -> CodecResult<Self> {
+        // Static string cannot be decoded only encoded
+        Err(CodecError::UnknownError)
     }
 }
 
