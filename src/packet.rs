@@ -523,9 +523,9 @@ mod test {
 
     packet! {
         struct Test {
-            TEST: String,
-            ALT: VarInt,
-            AA: u32,
+            TEST test: String,
+            ALT alt: VarInt,
+            AA aa: u32,
         }
     }
 
@@ -546,12 +546,12 @@ mod test {
     #[test]
     fn test() {
         let contents = Test {
-            TEST: String::from("Test"),
-            ALT: VarInt(0),
-            AA: 32,
+            test: String::from("Test"),
+            alt: VarInt(0),
+            aa: 32,
         };
         println!("{:?}", contents);
-        let packet = Packets::notify(components::Authentication::Second, contents);
+        let packet = Packets::notify(Components::Authentication(Authentication::Second), contents);
         println!("{packet:?}");
 
         let mut out = Cursor::new(Vec::new());

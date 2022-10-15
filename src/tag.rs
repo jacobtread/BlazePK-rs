@@ -387,7 +387,7 @@ mod test {
 
     #[test]
     fn test_tag() {
-        let mut tag_out = Tag(String::from("PORT"), ValueType::VarInt);
+        let tag_out = Tag(String::from("PORT"), ValueType::VarInt);
         let mut out = Vec::new();
         tag_out.encode(&mut out);
         println!("{out:?}")

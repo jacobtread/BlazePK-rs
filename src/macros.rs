@@ -42,13 +42,12 @@ macro_rules! packet {
     (
         struct $name:ident {
             $(
-                $field:ident: $ty:ty
+                $tag:ident $field:ident: $ty:ty
             ),* $(,)?
         }
 
     ) => {
         #[derive(Debug)]
-        #[allow(non_snake_case)]
         pub struct $name {
             $($field: $ty),*
         }
@@ -62,7 +61,7 @@ macro_rules! packet {
             #[allow(non_snake_case)]
             fn encode(&self, output: &mut Vec<u8>) {
                 $(
-                    $crate::Tag::encode_from(stringify!($field), &(<$ty>::value_type()), output);
+                    $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), output);
                     <$ty>::encode(&self.$field, output);
                 )*
             }
@@ -70,7 +69,7 @@ macro_rules! packet {
             #[allow(non_snake_case)]
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self>  {
                 $(
-                    $crate::Tag::expect_tag(stringify!($field), &(<$ty>::value_type()), reader)?;
+                    $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), reader)?;
                     let $field = <$ty>::decode(reader)
                         .map_err(|err|$crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
                 )*
@@ -90,7 +89,7 @@ macro_rules! group {
     (
         struct $name:ident {
             $(
-                $field:ident: $ty:ty
+                $tag:ident $field:ident: $ty:ty
             ),* $(,)?
         }
     ) => {
@@ -107,7 +106,7 @@ macro_rules! group {
             #[allow(non_snake_case)]
             fn encode(&self, output: &mut Vec<u8>) {
                 $(
-                    $crate::Tag::encode_from(stringify!($field), &(<$ty>::value_type()), output);
+                    $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), output);
                     <$ty>::encode(&self.$field, output);
                 )*
                 output.push(0)
@@ -117,7 +116,7 @@ macro_rules! group {
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
                 $crate::Tag::take_two(reader)?;
                 $(
-                    $crate::Tag::expect_tag(stringify!($field), &(<$ty>::value_type()), reader)?;
+                    $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), reader)?;
                     let $field = <$ty>::decode(reader)
                         .map_err(|err|$crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
                 )*
@@ -135,7 +134,7 @@ macro_rules! group {
     (
         (2) struct $name:ident {
             $(
-                $field:ident: $ty:ty
+                $tag:ident $field:ident: $ty:ty
             ),* $(,)?
         }
     ) => {
@@ -153,7 +152,7 @@ macro_rules! group {
             fn encode(&self, output: &mut Vec<u8>) {
                 output.push(2);
                 $(
-                    $crate::Tag::encode_from(stringify!($field), &(<$ty>::value_type()), output);
+                    $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), output);
                     <$ty>::encode(&self.$field, output);
                 )*
                 output.push(0);
@@ -163,7 +162,7 @@ macro_rules! group {
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
                 $crate::Tag::take_two(reader)?;
                 $(
-                    $crate::Tag::expect_tag(stringify!($field), &(<$ty>::value_type()), reader)?;
+                    $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), reader)?;
                     let $field = <$ty>::decode(reader)
                         .map_err(|err|$crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
                 )*
@@ -229,6 +228,7 @@ macro_rules! define_components {
 
 
             fn values(&self)-> (u16, u16) {
+                use $crate::PacketComponent;
                 match self {
                     $(
                         Self::$component(command) => ($component_value, command.command()),
@@ -238,6 +238,7 @@ macro_rules! define_components {
             }
 
             fn from_values(component: u16, command: u16, notify: bool) -> Self {
+                use $crate::PacketComponent;
                 match component {
                     $($component_value => Self::$component($component::from_value(command, notify)),)*
                     _ => Self::Unknown(component, command),
@@ -297,24 +298,24 @@ mod test {
 
     packet! {
         struct TestStruct {
-            AA: u8,
-            AB: VarInt,
-            AC: String,
-            AD: Vec<u8>,
-            AE: MyGroup,
-            AF: Vec<String>,
-            AG: Vec<MyGroup>,
-            AH: TdfMap<String, String>,
-            AI: TdfOptional<String>,
-            AK: VarIntList,
-            AL: (VarInt, VarInt),
-            AM: (VarInt, VarInt, VarInt)
+            AA aa: u8,
+            AB ab: VarInt,
+            AC ac: String,
+            AD ad: Vec<u8>,
+            AE ae: MyGroup,
+            AF af: Vec<String>,
+            AG ag: Vec<MyGroup>,
+            AH ah: TdfMap<String, String>,
+            AI ai: TdfOptional<String>,
+            AK ak: VarIntList,
+            AL al: (VarInt, VarInt),
+            AM am: (VarInt, VarInt, VarInt)
         }
     }
 
     group! {
         struct MyGroup {
-            ABCD: String
+            ABCD abcd: String
         }
     }
 
@@ -325,27 +326,27 @@ mod test {
         map.insert("Other", "Test");
         map.insert("New", "Value");
         let str = TestStruct {
-            AA: 254,
-            AB: VarInt(12),
-            AC: String::from("test"),
-            AD: vec![0, 5, 12, 5],
-            AE: MyGroup {
-                ABCD: String::from("YES"),
+            aa: 254,
+            ab: VarInt(12),
+            ac: String::from("test"),
+            ad: vec![0, 5, 12, 5],
+            ae: MyGroup {
+                abcd: String::from("YES"),
             },
-            AF: vec![String::from("ABC"), String::from("Abced")],
-            AG: vec![
+            af: vec![String::from("ABC"), String::from("Abced")],
+            ag: vec![
                 MyGroup {
-                    ABCD: String::from("YES1"),
+                    abcd: String::from("YES1"),
                 },
                 MyGroup {
-                    ABCD: String::from("YES2"),
+                    abcd: String::from("YES2"),
                 },
             ],
-            AH: map,
-            AI: TdfOptional::<String>::None,
-            AK: VarIntList(vec![VarInt(1)]),
-            AL: (VarInt(5), VarInt(256)),
-            AM: (VarInt(255), VarInt(6000), VarInt(6743)),
+            ah: map,
+            ai: TdfOptional::<String>::None,
+            ak: VarIntList(vec![VarInt(1)]),
+            al: (VarInt(5), VarInt(256)),
+            am: (VarInt(255), VarInt(6000), VarInt(6743)),
         };
 
         let out = str.encode_bytes();
@@ -356,10 +357,8 @@ mod test {
         let str_out = TestStruct::decode(&mut reader).unwrap();
         println!("{str_out:?}");
 
-        assert_eq!(str.AB, str_out.AB);
-        assert_eq!(str.AC, str_out.AC);
-        assert_eq!(str.AD, str_out.AD);
-        assert_eq!(str.AB, str_out.AB);
-        assert_eq!(str.AB, str_out.AB);
+        assert_eq!(str.ab, str_out.ab);
+        assert_eq!(str.ac, str_out.ac);
+        assert_eq!(str.ad, str_out.ad);
     }
 }

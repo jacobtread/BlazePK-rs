@@ -230,6 +230,10 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
         }
     }
 
+    pub fn from_existing(keys: Vec<K>, values: Vec<V>) -> Self {
+        Self { keys, values }
+    }
+
     /// Insert a new entry into the map
     pub fn insert(&mut self, key: impl Into<K>, value: impl Into<V>) {
         self.keys.push(key.into());
