@@ -211,16 +211,18 @@ pub struct Packets {}
 impl Packets {
     /// Creates a new response packet for responding to the provided
     /// decodable packet. With the `contents`
-    pub fn response<C: PacketContent>(packet: &OpaquePacket, contents: C) -> Packet<C> {
+    pub fn response<C: PacketContent>(packet: &OpaquePacket, contents: C) -> OpaquePacket {
         let mut header = packet.0.clone();
         header.ty = PacketType::Response;
-        Packet(header, contents)
+        OpaquePacket(header, contents.encode_bytes())
     }
 
     /// Shortcut function for creating a response packet with no content
     #[inline]
-    pub fn response_empty(packet: &OpaquePacket) -> Packet<EmptyContent> {
-        Self::response(packet, EmptyContent {})
+    pub fn response_empty(packet: &OpaquePacket) -> OpaquePacket {
+        let mut header = packet.0.clone();
+        header.ty = PacketType::Response;
+        OpaquePacket(header, Vec::with_capacity(0))
     }
 
     /// Creates a new error response packet for responding to the
@@ -229,24 +231,30 @@ impl Packets {
         packet: &OpaquePacket,
         error: impl Into<u16>,
         contents: C,
-    ) -> Packet<C> {
+    ) -> OpaquePacket {
         let mut header = packet.0.clone();
         header.error = error.into();
         header.ty = PacketType::Error;
-        Packet(header, contents)
+        OpaquePacket(header, contents.encode_bytes())
     }
 
     /// Shortcut function for creating an error packet with no content
     #[inline]
-    pub fn error_empty(packet: &OpaquePacket, error: impl Into<u16>) -> Packet<EmptyContent> {
-        Self::error(packet, error, EmptyContent {})
+    pub fn error_empty(packet: &OpaquePacket, error: impl Into<u16>) -> OpaquePacket {
+        let mut header = packet.0.clone();
+        header.error = error.into();
+        header.ty = PacketType::Error;
+        OpaquePacket(header, Vec::with_capacity(0))
     }
 
     /// Creates a new notify packet with the provided component and command
     /// and `contents`
-    pub fn notify<C: PacketContent, T: PacketComponents>(component: T, contents: C) -> Packet<C> {
+    pub fn notify<C: PacketContent, T: PacketComponents>(
+        component: T,
+        contents: C,
+    ) -> OpaquePacket {
         let (component, command) = component.values();
-        Packet(
+        OpaquePacket(
             PacketHeader {
                 component,
                 command,
@@ -254,13 +262,21 @@ impl Packets {
                 ty: PacketType::Notify,
                 id: 0,
             },
-            contents,
+            contents.encode_bytes(),
         )
     }
     /// Shortcut function for creating a notify packet with no content
     #[inline]
-    pub fn notify_empty<T: PacketComponents>(component: T) -> Packet<EmptyContent> {
-        Self::notify(component, EmptyContent {})
+    pub fn notify_empty<T: PacketComponents>(component: T) -> OpaquePacket {
+        let (component, command) = component.values();
+        let header = PacketHeader {
+            component,
+            command,
+            error: 0,
+            ty: PacketType::Notify,
+            id: 0,
+        };
+        OpaquePacket(header, Vec::with_capacity(0))
     }
 
     /// Creates a new request packet retrieving its ID from the provided
@@ -269,9 +285,9 @@ impl Packets {
         counter: &mut R,
         component: T,
         contents: C,
-    ) -> Packet<C> {
+    ) -> OpaquePacket {
         let (component, command) = component.values();
-        Packet(
+        OpaquePacket(
             PacketHeader {
                 component,
                 command,
@@ -279,12 +295,37 @@ impl Packets {
                 ty: PacketType::Request,
                 id: counter.next(),
             },
-            contents,
+            contents.encode_bytes(),
+        )
+    }
+
+    /// Creates a new request packet retrieving its ID from the provided
+    /// request counter.
+    pub fn request_empty<R: RequestCounter, T: PacketComponents>(
+        counter: &mut R,
+        component: T,
+    ) -> OpaquePacket {
+        let (component, command) = component.values();
+        OpaquePacket(
+            PacketHeader {
+                component,
+                command,
+                error: 0,
+                ty: PacketType::Request,
+                id: counter.next(),
+            },
+            Vec::with_capacity(0),
         )
     }
 }
 
 impl<C: PacketContent> Packet<C> {
+    /// Converts this packet into an opaque packet
+    pub fn opaque(self) -> OpaquePacket {
+        let contents = self.1.encode_bytes();
+        OpaquePacket(self.0, contents)
+    }
+
     /// Reads a packet from the provided input and parses the
     /// contents
     pub fn read<R: Read>(input: &mut R) -> PacketResult<Packet<C>>
@@ -464,6 +505,31 @@ impl OpaquePacket {
             matches!(&header.ty, PacketType::Notify),
         );
         Ok((component, Self(header, contents)))
+    }
+
+    /// Handles writing the header and contents of this packet to
+    /// the Writable object
+    pub fn write<W: Write>(&self, output: &mut W) -> io::Result<()>
+    where
+        Self: Sized,
+    {
+        let header = self.0.encode_bytes(content.len());
+        output.write_all(&header)?;
+        output.write_all(&self.1)?;
+        Ok(())
+    }
+
+    /// Handles writing the header and contents of this packet to
+    /// the Writable object
+    #[cfg(feature = "async")]
+    pub async fn write_async<W: AsyncWrite + Unpin>(&self, output: &mut W) -> io::Result<()>
+    where
+        Self: Sized,
+    {
+        let header = self.0.encode_bytes(content.len());
+        output.write_all(&header).await?;
+        output.write_all(&self.1).await?;
+        Ok(())
     }
 }
 
