@@ -513,9 +513,10 @@ impl OpaquePacket {
     where
         Self: Sized,
     {
+        let content = &self.1;
         let header = self.0.encode_bytes(content.len());
         output.write_all(&header)?;
-        output.write_all(&self.1)?;
+        output.write_all(content)?;
         Ok(())
     }
 
@@ -526,9 +527,10 @@ impl OpaquePacket {
     where
         Self: Sized,
     {
+        let content = &self.1;
         let header = self.0.encode_bytes(content.len());
         output.write_all(&header).await?;
-        output.write_all(&self.1).await?;
+        output.write_all(content).await?;
         Ok(())
     }
 }
