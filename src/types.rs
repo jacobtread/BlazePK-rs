@@ -513,16 +513,19 @@ impl Codec for String {
     }
 }
 
-impl Codec for Vec<u8> {
+#[derive(Debug, Clone)]
+pub struct Blob(pub Vec<u8>);
+
+impl Codec for Blob {
     fn encode(&self, output: &mut Vec<u8>) {
-        VarInt(self.len() as u64).encode(output);
-        output.extend_from_slice(self)
+        VarInt(self.0.len() as u64).encode(output);
+        output.extend_from_slice(&self.0)
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
         let length = VarInt::decode(reader)?.0 as usize;
         let bytes = reader.take(length)?;
-        Ok(bytes.to_vec())
+        Ok(Blob(bytes.to_vec()))
     }
 
     fn value_type() -> ValueType {
@@ -533,6 +536,7 @@ impl Codec for Vec<u8> {
 /// Trait for a Codec value which can be apart of a Tdf list
 pub trait Listable: Codec {}
 
+impl<T: AsVarInt + Copy> Listable for T {}
 impl Listable for bool {}
 impl Listable for VarInt {}
 impl Listable for String {}
