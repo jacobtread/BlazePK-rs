@@ -242,6 +242,15 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
         }
     }
 
+    /// Creates a new TdfMap where both Vec have
+    /// a zero capacity
+    pub fn empty() -> TdfMap<K, V> {
+        Self {
+            keys: Vec::with_capacity(0),
+            values: Vec::with_capacity(0),
+        }
+    }
+
     pub fn build() -> TdfMapBuilder<K, V> {
         TdfMapBuilder {
             keys: Vec::new(),
