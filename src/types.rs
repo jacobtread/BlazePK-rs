@@ -602,6 +602,11 @@ impl Codec for isize {
     }
 }
 
+pub fn encode_empty_str(output: &mut Vec<u8>) {
+    output.push(1);
+    output.push(0);
+}
+
 impl Codec for &'static str {
     fn encode(&self, output: &mut Vec<u8>) {
         let mut bytes = self.as_bytes().to_vec();
@@ -687,7 +692,7 @@ impl Listable for bool {}
 
 impl Listable for String {}
 
-impl<T: VarInt> Listable for (T, T, T) {}
+impl<A: VarInt, B: VarInt, C: VarInt> Listable for (A, B, C) {}
 
 impl<T: Listable> Codec for Vec<T> {
     fn encode(&self, output: &mut Vec<u8>) {
@@ -765,15 +770,15 @@ impl<T: VarInt> Codec for VarIntList<T> {
     }
 }
 
-impl<T: VarInt> Codec for (T, T) {
+impl<A: VarInt, B: VarInt> Codec for (A, B) {
     fn encode(&self, output: &mut Vec<u8>) {
         self.0.encode(output);
         self.1.encode(output);
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let a = T::decode(reader)?;
-        let b = T::decode(reader)?;
+        let a = A::decode(reader)?;
+        let b = B::decode(reader)?;
         Ok((a, b))
     }
 
@@ -782,7 +787,7 @@ impl<T: VarInt> Codec for (T, T) {
     }
 }
 
-impl<T: VarInt> Codec for (T, T, T) {
+impl<A: VarInt, B: VarInt, C: VarInt> Codec for (A, B, C) {
     fn encode(&self, output: &mut Vec<u8>) {
         self.0.encode(output);
         self.1.encode(output);
@@ -790,9 +795,9 @@ impl<T: VarInt> Codec for (T, T, T) {
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let a = T::decode(reader)?;
-        let b = T::decode(reader)?;
-        let c = T::decode(reader)?;
+        let a = A::decode(reader)?;
+        let b = B::decode(reader)?;
+        let c = C::decode(reader)?;
         Ok((a, b, c))
     }
 
