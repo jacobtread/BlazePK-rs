@@ -44,11 +44,11 @@ macro_rules! packet {
         impl $crate::Codec for $name {
 
             fn encode(&self, output: &mut Vec<u8>) {
-                $($crate::encode_field!(self, output, $field, $tag, $ty);)*
+                $($crate::encode_field!(output, $tag, &self.$field, $ty);)*
             }
 
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self>  {
-                $($crate::decode_field!(reader, $field, $tag, $ty);)*
+                $($crate::decode_field!(reader, $tag, $field, $ty);)*
                 Ok(Self {
                     $($field),*
                 })
@@ -60,16 +60,33 @@ macro_rules! packet {
 /// Macro for generating encoding for a field with with a tag and field
 #[macro_export]
 macro_rules! encode_field {
-    ($self:ident, $output:ident, $field:ident, $tag:ident, $ty:ty) => {
+    ($output:ident, $tag:ident, $field:expr, $ty:ty) => {
         $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), $output);
-        <$ty>::encode(&$self.$field, $output);
+        <$ty>::encode($field, $output);
+    };
+}
+
+#[macro_export]
+macro_rules! encode_zero {
+    ($output:ident, $tag:ident) => {
+        $crate::Tag::encode_from(stringify!($tag), &$crate::ValueType::VarInt, $output);
+        $output.push(0);
+    };
+}
+
+#[macro_export]
+macro_rules! encode_empty_str {
+    ($output:ident, $tag:ident) => {
+        $crate::Tag::encode_from(stringify!($tag), &$crate::ValueType::String, $output);
+        $output.push(1);
+        $output.push(0);
     };
 }
 
 /// Macro for generating decoding for a field and tag
 #[macro_export]
 macro_rules! decode_field {
-    ($reader:ident, $field:ident, $tag:ident, $ty:ty) => {
+    ($reader:ident, $tag:ident, $field:ident, $ty:ty) => {
         $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), $reader)?;
         let $field = <$ty>::decode($reader)
             .map_err(|err| $crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
@@ -99,13 +116,13 @@ macro_rules! group {
         impl $crate::Codec for $name {
 
             fn encode(&self, output: &mut Vec<u8>) {
-                $($crate::encode_field!(self, output, $field, $tag, $ty);)*
+                $($crate::encode_field!(output, $tag, &self.$field, $ty);)*
                 output.push(0)
             }
 
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
                 $crate::Tag::take_two(reader)?;
-                $($crate::decode_field!(reader, $field, $tag, $ty);)*
+                $($crate::decode_field!(reader, $tag, $field, $ty);)*
                 $crate::Tag::discard_group(reader)?;
                 Ok(Self {
                     $($field),*
@@ -136,13 +153,13 @@ macro_rules! group {
 
             fn encode(&self, output: &mut Vec<u8>) {
                 output.push(2);
-                $($crate::encode_field!(self, output, $field, $tag, $ty);)*
+                $($crate::encode_field!(output, $tag, &self.$field, $ty);)*
                 output.push(0);
             }
 
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
                 $crate::Tag::take_two(reader)?;
-                $($crate::decode_field!(reader, $field, $tag, $ty);)*
+                $($crate::decode_field!(reader, $tag, $field, $ty);)*
                 $crate::Tag::discard_group(reader)?;
                 Ok(Self {
                     $($field),*
