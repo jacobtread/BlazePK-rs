@@ -49,7 +49,7 @@ macro_rules! packet {
     ) => {
         #[derive(Debug)]
         pub struct $name {
-            $($field: $ty),*
+            $(pub $field: $ty),*
         }
 
         /// Trait fitting implementations
@@ -96,7 +96,7 @@ macro_rules! group {
         #[derive(Debug)]
         #[allow(non_snake_case)]
         pub struct $name {
-            $($field: $ty),*
+            $(pub $field: $ty),*
         }
 
         impl $crate::Listable for $name {}
@@ -141,7 +141,7 @@ macro_rules! group {
         #[derive(Debug)]
         #[allow(non_snake_case)]
         pub struct $name {
-            $($field: $ty),*
+            $(pub $field: $ty),*
         }
 
         impl $crate::Listable for $name {}

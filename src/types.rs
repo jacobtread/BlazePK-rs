@@ -74,6 +74,11 @@ impl VarIntList {
         Self(Vec::new())
     }
 
+    /// Creates a new VarIntList with no capacity
+    pub fn empty() -> Self {
+        Self(Vec::with_capacity(0))
+    }
+
     /// Creates a new VarIntList with the provided
     /// capacity
     pub fn with_capacity(capacity: usize) -> Self {
@@ -524,6 +529,12 @@ impl Codec for String {
 
 #[derive(Debug, Clone)]
 pub struct Blob(pub Vec<u8>);
+
+impl Blob {
+    pub fn empty() -> Self {
+        Self(Vec::with_capacity(0))
+    }
+}
 
 impl Codec for Blob {
     fn encode(&self, output: &mut Vec<u8>) {
