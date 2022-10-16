@@ -4,31 +4,16 @@
 /// You can only use types that implement Codec the ones implemented
 /// by this library are
 ///
-/// *Any = Any of the following types
-///
-/// VarInt
-/// String
-/// Vec<u8>
-/// Group (Creates with group macro)
-/// Vec<String | VarInt | Float | Group>
-/// TdfMap<String | VarInt, *Any>
-/// TdfOptional<*Any>
-/// VarIntList
-/// (VarInt, VarInt)
-/// (VarInt, VarInt, VarInt)
-///
-/// *All field names must be in caps and no longer than 4 chars*
-///
 /// Example Usage
 /// ```
 ///
-/// use blaze_pk::{packet, VarInt};
+/// use blaze_pk::{packet, Blob};
 ///
 /// packet! {
 ///     struct Test {
-///         TEST: VarInt,
+///         TEST: u16,
 ///         ALT: String,
-///         BYT: Vec<u8>
+///         BYT: Blob
 ///     }
 /// }
 ///
@@ -58,26 +43,36 @@ macro_rules! packet {
 
         impl $crate::Codec for $name {
 
-            #[allow(non_snake_case)]
             fn encode(&self, output: &mut Vec<u8>) {
-                $(
-                    $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), output);
-                    <$ty>::encode(&self.$field, output);
-                )*
+                $($crate::encode_field!(self, output, $field, $tag, $ty);)*
             }
 
-            #[allow(non_snake_case)]
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self>  {
-                $(
-                    $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), reader)?;
-                    let $field = <$ty>::decode(reader)
-                        .map_err(|err|$crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
-                )*
+                $($crate::decode_field!(reader, $field, $tag, $ty);)*
                 Ok(Self {
                     $($field),*
                 })
             }
         }
+    };
+}
+
+/// Macro for generating encoding for a field with with a tag and field
+#[macro_export]
+macro_rules! encode_field {
+    ($self:ident, $output:ident, $field:ident, $tag:ident, $ty:ty) => {
+        $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), $output);
+        <$ty>::encode(&$self.$field, $output);
+    };
+}
+
+/// Macro for generating decoding for a field and tag
+#[macro_export]
+macro_rules! decode_field {
+    ($reader:ident, $field:ident, $tag:ident, $ty:ty) => {
+        $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), $reader)?;
+        let $field = <$ty>::decode($reader)
+            .map_err(|err| $crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
     };
 }
 
@@ -103,23 +98,14 @@ macro_rules! group {
 
         impl $crate::Codec for $name {
 
-            #[allow(non_snake_case)]
             fn encode(&self, output: &mut Vec<u8>) {
-                $(
-                    $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), output);
-                    <$ty>::encode(&self.$field, output);
-                )*
+                $($crate::encode_field!(self, output, $field, $tag, $ty);)*
                 output.push(0)
             }
 
-            #[allow(non_snake_case)]
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
                 $crate::Tag::take_two(reader)?;
-                $(
-                    $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), reader)?;
-                    let $field = <$ty>::decode(reader)
-                        .map_err(|err|$crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
-                )*
+                $($crate::decode_field!(reader, $field, $tag, $ty);)*
                 $crate::Tag::discard_group(reader)?;
                 Ok(Self {
                     $($field),*
@@ -148,24 +134,15 @@ macro_rules! group {
 
         impl $crate::Codec for $name {
 
-            #[allow(non_snake_case)]
             fn encode(&self, output: &mut Vec<u8>) {
                 output.push(2);
-                $(
-                    $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), output);
-                    <$ty>::encode(&self.$field, output);
-                )*
+                $($crate::encode_field!(self, output, $field, $tag, $ty);)*
                 output.push(0);
             }
 
-            #[allow(non_snake_case)]
             fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
                 $crate::Tag::take_two(reader)?;
-                $(
-                    $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), reader)?;
-                    let $field = <$ty>::decode(reader)
-                        .map_err(|err|$crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
-                )*
+                $($crate::decode_field!(reader, $field, $tag, $ty);)*
                 $crate::Tag::discard_group(reader)?;
                 Ok(Self {
                     $($field),*
