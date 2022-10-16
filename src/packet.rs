@@ -211,7 +211,7 @@ pub struct Packets {}
 impl Packets {
     /// Creates a new response packet for responding to the provided
     /// decodable packet. With the `contents`
-    pub fn response<C: PacketContent>(packet: &OpaquePacket, contents: C) -> OpaquePacket {
+    pub fn response<C: PacketContent>(packet: &OpaquePacket, contents: &C) -> OpaquePacket {
         let mut header = packet.0.clone();
         header.ty = PacketType::Response;
         OpaquePacket(header, contents.encode_bytes())
@@ -230,7 +230,7 @@ impl Packets {
     pub fn error<C: PacketContent>(
         packet: &OpaquePacket,
         error: impl Into<u16>,
-        contents: C,
+        contents: &C,
     ) -> OpaquePacket {
         let mut header = packet.0.clone();
         header.error = error.into();
@@ -251,7 +251,7 @@ impl Packets {
     /// and `contents`
     pub fn notify<C: PacketContent, T: PacketComponents>(
         component: T,
-        contents: C,
+        contents: &C,
     ) -> OpaquePacket {
         let (component, command) = component.values();
         OpaquePacket(
@@ -284,7 +284,7 @@ impl Packets {
     pub fn request<R: RequestCounter, C: PacketContent, T: PacketComponents>(
         counter: &mut R,
         component: T,
-        contents: C,
+        contents: &C,
     ) -> OpaquePacket {
         let (component, command) = component.values();
         OpaquePacket(
@@ -618,7 +618,10 @@ mod test {
             aa: 32,
         };
         println!("{:?}", contents);
-        let packet = Packets::notify(Components::Authentication(Authentication::Second), contents);
+        let packet = Packets::notify(
+            Components::Authentication(Authentication::Second),
+            &contents,
+        );
         println!("{packet:?}");
 
         let mut out = Cursor::new(Vec::new());
