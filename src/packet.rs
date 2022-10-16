@@ -1,4 +1,4 @@
-use crate::codec::{decode_u16, encode_u16, Codec, CodecError, CodecResult, Reader};
+use crate::codec::{decode_u16_be, encode_u16_be, Codec, CodecError, CodecResult, Reader};
 use std::fmt::Debug;
 use std::io;
 use std::io::{Read, Write};
@@ -122,13 +122,13 @@ impl PacketHeader {
     pub fn encode_bytes(&self, length: usize) -> Vec<u8> {
         let mut header = Vec::with_capacity(12);
         let is_extended = length > 0xFFFF;
-        encode_u16(&(length as u16), &mut header);
-        encode_u16(&self.component, &mut header);
-        encode_u16(&self.command, &mut header);
-        encode_u16(&self.error, &mut header);
+        encode_u16_be(&(length as u16), &mut header);
+        encode_u16_be(&self.component, &mut header);
+        encode_u16_be(&self.command, &mut header);
+        encode_u16_be(&self.error, &mut header);
         header.push((self.ty.value() >> 8) as u8);
         header.push(if is_extended { 0x10 } else { 0x00 });
-        encode_u16(&self.id, &mut header);
+        encode_u16_be(&self.id, &mut header);
         if is_extended {
             header.push(((length & 0xFF000000) >> 24) as u8);
             header.push(((length & 0x00FF0000) >> 16) as u8);
@@ -144,12 +144,12 @@ impl PacketHeader {
     {
         let mut header = [0u8; 12];
         input.read_exact(&mut header)?;
-        let mut length = decode_u16(&header[0..2])? as usize;
-        let component = decode_u16(&header[2..4])?;
-        let command = decode_u16(&header[4..6])?;
-        let error = decode_u16(&header[6..8])?;
-        let q_type = decode_u16(&header[8..10])?;
-        let id = decode_u16(&header[10..12])?;
+        let mut length = decode_u16_be(&header[0..2])? as usize;
+        let component = decode_u16_be(&header[2..4])?;
+        let command = decode_u16_be(&header[4..6])?;
+        let error = decode_u16_be(&header[6..8])?;
+        let q_type = decode_u16_be(&header[8..10])?;
+        let id = decode_u16_be(&header[10..12])?;
         if q_type & 0x10 != 0 {
             let mut buffer = [0; 2];
             input.read_exact(&mut buffer)?;
@@ -176,12 +176,12 @@ impl PacketHeader {
     {
         let mut header = [0u8; 12];
         input.read_exact(&mut header).await?;
-        let mut length = decode_u16(&header[0..2])? as usize;
-        let component = decode_u16(&header[2..4])?;
-        let command = decode_u16(&header[4..6])?;
-        let error = decode_u16(&header[6..8])?;
-        let q_type = decode_u16(&header[8..10])?;
-        let id = decode_u16(&header[10..12])?;
+        let mut length = decode_u16_be(&header[0..2])? as usize;
+        let component = decode_u16_be(&header[2..4])?;
+        let command = decode_u16_be(&header[4..6])?;
+        let error = decode_u16_be(&header[6..8])?;
+        let q_type = decode_u16_be(&header[8..10])?;
+        let id = decode_u16_be(&header[10..12])?;
         if q_type & 0x10 != 0 {
             let mut buffer = [0; 2];
             input.read_exact(&mut buffer).await?;
@@ -585,14 +585,13 @@ impl RequestCounter for AtomicCounter {
 #[cfg(test)]
 mod test {
     use crate::packet::{OpaquePacket, Packet, Packets};
-    use crate::types::VarInt;
     use crate::{define_components, packet};
     use std::io::Cursor;
 
     packet! {
         struct Test {
             TEST test: String,
-            ALT alt: VarInt,
+            ALT alt: u32,
             AA aa: u32,
         }
     }
@@ -615,7 +614,7 @@ mod test {
     fn test() {
         let contents = Test {
             test: String::from("Test"),
-            alt: VarInt(0),
+            alt: 0,
             aa: 32,
         };
         println!("{:?}", contents);

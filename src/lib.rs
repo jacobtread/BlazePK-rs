@@ -13,4 +13,4 @@ pub use packet::{
     PacketError, PacketResult, PacketType, Packets, RequestCounter, SimpleCounter,
 };
 pub use tag::{Tag, ValueType};
-pub use types::{Blob, Listable, TdfMap, TdfOptional, VarInt, VarIntList, EMPTY_OPTIONAL};
+pub use types::{Blob, Listable, TdfMap, TdfOptional, VarIntList, EMPTY_OPTIONAL};

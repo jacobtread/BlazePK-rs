@@ -286,7 +286,7 @@ macro_rules! define_components {
 #[cfg(test)]
 mod test {
     use crate::{Codec, Reader};
-    use crate::{TdfMap, TdfOptional, VarInt, VarIntList};
+    use crate::{TdfMap, TdfOptional, VarIntList};
 
     define_components! {
         Authentication (0x1) {
@@ -299,7 +299,7 @@ mod test {
     packet! {
         struct TestStruct {
             AA aa: u8,
-            AB ab: VarInt,
+            AB ab: u16,
             AC ac: String,
             AD ad: Vec<u8>,
             AE ae: MyGroup,
@@ -307,9 +307,9 @@ mod test {
             AG ag: Vec<MyGroup>,
             AH ah: TdfMap<String, String>,
             AI ai: TdfOptional<String>,
-            AK ak: VarIntList,
-            AL al: (VarInt, VarInt),
-            AM am: (VarInt, VarInt, VarInt)
+            AK ak: VarIntList<u32>,
+            AL al: (u8, u8),
+            AM am: (u32, u32, u32)
         }
     }
 
@@ -327,7 +327,7 @@ mod test {
         map.insert("New", "Value");
         let str = TestStruct {
             aa: 254,
-            ab: VarInt(12),
+            ab: 12,
             ac: String::from("test"),
             ad: vec![0, 5, 12, 5],
             ae: MyGroup {
@@ -344,9 +344,9 @@ mod test {
             ],
             ah: map,
             ai: TdfOptional::<String>::None,
-            ak: VarIntList(vec![VarInt(1)]),
-            al: (VarInt(5), VarInt(256)),
-            am: (VarInt(255), VarInt(6000), VarInt(6743)),
+            ak: VarIntList(vec![1]),
+            al: (5, 236),
+            am: (255, 6000, 6743),
         };
 
         let out = str.encode_bytes();

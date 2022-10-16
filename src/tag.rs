@@ -1,5 +1,5 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
-use crate::types::{VarInt, VarIntList, EMPTY_OPTIONAL};
+use crate::types::{VarIntList, EMPTY_OPTIONAL};
 use std::fmt::Debug;
 
 /// Tag for a Tdf value. This contains the String tag for naming
@@ -92,7 +92,7 @@ impl Tag {
     fn debug_discard_type(ty: &ValueType, reader: &mut Reader) -> CodecResult<()> {
         match ty {
             ValueType::VarInt => {
-                let value = VarInt::decode(reader)?;
+                let value = usize::decode(reader)?;
                 println!("VarInt: {value:?}");
             }
             ValueType::String => {
@@ -121,7 +121,7 @@ impl Tag {
             ValueType::List => {
                 let new_ty = ValueType::decode(reader)?;
                 println!("List Type: {new_ty:?}");
-                let length = VarInt::decode(reader)?.0 as usize;
+                let length = usize::decode(reader)?;
                 println!("STart list");
                 for _ in 0..length {
                     Self::debug_discard_type(&new_ty, reader)?;
@@ -133,7 +133,7 @@ impl Tag {
                 println!("Map Key Type: {key_ty:?}");
                 let value_ty = ValueType::decode(reader)?;
                 println!("Map Value Type: {value_ty:?}");
-                let length = VarInt::decode(reader)?.0 as usize;
+                let length = usize::decode(reader)?;
                 for _ in 0..length {
                     Self::debug_discard_type(&key_ty, reader)?;
                     Self::debug_discard_type(&value_ty, reader)?;
@@ -149,15 +149,15 @@ impl Tag {
                 }
             }
             ValueType::VarIntList => {
-                let list = VarIntList::decode(reader)?;
+                let list = VarIntList::<usize>::decode(reader)?;
                 println!("VarIntList {list:?}");
             }
             ValueType::Pair => {
-                let pair = <(VarInt, VarInt)>::decode(reader)?;
+                let pair = <(usize, usize)>::decode(reader)?;
                 println!("Pair {pair:?}");
             }
             ValueType::Triple => {
-                let value = <(VarInt, VarInt, VarInt)>::decode(reader)?;
+                let value = <(usize, usize, usize)>::decode(reader)?;
                 println!("Triple {value:?}")
             }
             ValueType::Float => {
@@ -178,13 +178,13 @@ impl Tag {
     /// Discards the provided type of value
     pub fn discard_type(ty: &ValueType, reader: &mut Reader) -> CodecResult<()> {
         match ty {
-            ValueType::VarInt => VarInt::skip(reader)?,
+            ValueType::VarInt => usize::skip(reader)?,
             ValueType::String => String::skip(reader)?,
             ValueType::Blob => <Vec<u8>>::skip(reader)?,
             ValueType::Group => Self::discard_group(reader)?,
             ValueType::List => {
                 let new_ty = ValueType::decode(reader)?;
-                let length = VarInt::decode(reader)?.0 as usize;
+                let length = usize::decode(reader)?;
                 for _ in 0..length {
                     Self::discard_type(&new_ty, reader)?;
                 }
@@ -192,7 +192,7 @@ impl Tag {
             ValueType::Map => {
                 let key_ty = ValueType::decode(reader)?;
                 let value_ty = ValueType::decode(reader)?;
-                let length = VarInt::decode(reader)?.0 as usize;
+                let length = usize::decode(reader)?;
                 for _ in 0..length {
                     Self::discard_type(&key_ty, reader)?;
                     Self::discard_type(&value_ty, reader)?;
@@ -204,9 +204,9 @@ impl Tag {
                     Self::discard_tag(reader)?;
                 }
             }
-            ValueType::VarIntList => VarIntList::skip(reader)?,
-            ValueType::Pair => <(VarInt, VarInt)>::skip(reader)?,
-            ValueType::Triple => <(VarInt, VarInt, VarInt)>::skip(reader)?,
+            ValueType::VarIntList => VarIntList::<usize>::skip(reader)?,
+            ValueType::Pair => <(usize, usize)>::skip(reader)?,
+            ValueType::Triple => <(usize, usize, usize)>::skip(reader)?,
             ValueType::Float => f32::skip(reader)?,
             ValueType::Unknown(_) => {}
         };

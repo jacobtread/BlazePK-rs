@@ -10,65 +10,9 @@ pub trait TdfGroup: Codec + Debug {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct VarInt(pub u64);
+pub struct VarIntList<T: VarInt>(pub Vec<T>);
 
-/// Trait for converting var int to another type
-/// and back again
-trait AsVarInt: PartialEq + Eq + Debug {
-    /// Function for converting self to VarInt
-    fn to_var_int(self) -> VarInt;
-
-    /// Function for converting VarInt to self
-    fn from_var_int(value: VarInt) -> Self;
-}
-
-/// Macro for automatically generating From traits for VarInt
-/// for the all the number types
-macro_rules! into_var_int {
-    ($($ty:ty),*) => {
-        $(
-            impl From<$ty> for VarInt {
-                fn from(value: $ty) -> VarInt {
-                    VarInt(value as u64)
-                }
-            }
-
-            impl Into<$ty> for VarInt {
-                fn into(self) -> $ty {
-                    self.0 as $ty
-                }
-            }
-        )*
-    };
-}
-
-/// Macro for automatically generating the AsVarInt
-/// trait for conversion between types
-macro_rules! as_var_int {
-    ($($ty:ty),*) => {
-        $(
-            impl AsVarInt for $ty {
-                #[inline]
-                fn to_var_int(self) -> VarInt {
-                    VarInt::from(self)
-                }
-
-                #[inline]
-                fn from_var_int(value: VarInt) -> $ty {
-                    value.into()
-                }
-            }
-        )*
-    };
-}
-
-into_var_int!(i8, i16, i32, i64, u8, u16, u32, u64);
-as_var_int!(i8, i16, i32, i64, u8, u16, u32, u64);
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct VarIntList(pub Vec<VarInt>);
-
-impl VarIntList {
+impl<T: VarInt> VarIntList<T> {
     /// Creates a new VarIntList
     pub fn new() -> Self {
         Self(Vec::new())
@@ -79,6 +23,12 @@ impl VarIntList {
         Self(Vec::with_capacity(0))
     }
 
+    pub fn only(value: T) -> Self {
+        let mut values = Vec::with_capacity(1);
+        values.push(value);
+        Self(values)
+    }
+
     /// Creates a new VarIntList with the provided
     /// capacity
     pub fn with_capacity(capacity: usize) -> Self {
@@ -86,13 +36,13 @@ impl VarIntList {
     }
 
     /// Inserts a new value into the underlying list
-    pub fn insert(&mut self, value: impl Into<VarInt>) {
+    pub fn insert(&mut self, value: impl Into<T>) {
         self.0.push(value.into())
     }
 
     /// Removes the value at the provided index and returns
     /// the value stored at it if there is one
-    pub fn remove(&mut self, index: usize) -> Option<VarInt> {
+    pub fn remove(&mut self, index: usize) -> Option<T> {
         if index < self.0.len() {
             Some(self.0.remove(index))
         } else {
@@ -102,7 +52,7 @@ impl VarIntList {
 
     /// Retrieves the value at the provided index returning
     /// a borrow if one is there
-    pub fn get(&mut self, index: usize) -> Option<&VarInt> {
+    pub fn get(&mut self, index: usize) -> Option<&T> {
         self.0.get(index)
     }
 }
@@ -134,12 +84,26 @@ impl<T: Codec> TdfOptional<T> {
 
 pub const EMPTY_OPTIONAL: u8 = 0x7F;
 
+pub trait VarInt: PartialEq + Eq + Debug + Codec {}
+
 /// Trait implemented by types that can be map keys
 pub trait MapKey: PartialEq + Eq + Debug + Codec {}
 
 impl MapKey for &'static str {}
+
 impl MapKey for String {}
-impl MapKey for VarInt {}
+
+impl<T: VarInt> MapKey for T {}
+
+macro_rules! impl_var_int {
+    ($($ty:ty),*) => {
+        $(
+        impl VarInt for $ty {}
+        )*
+    };
+}
+
+impl_var_int!(u8, i8, u16, i16, u32, i32, u64, i64, usize, isize);
 
 #[derive(Debug, Clone)]
 pub struct TdfMapBuilder<K: MapKey, V: Codec> {
@@ -181,8 +145,7 @@ impl<K: MapKey, V: Codec> Codec for TdfMap<K, V> {
         key_type.encode(output);
         value_type.encode(output);
 
-        let size = self.len();
-        VarInt(size as u64).encode(output);
+        self.len().encode(output);
 
         for (key, value) in self {
             key.encode(output);
@@ -205,7 +168,7 @@ impl<K: MapKey, V: Codec> Codec for TdfMap<K, V> {
             return Err(CodecError::UnexpectedType(expected_value, value_type));
         }
 
-        let length = VarInt::decode(reader)?.0 as usize;
+        let length = usize::decode(reader)?;
         let mut map = TdfMap::with_capacity(length);
 
         for _ in 0..length {
@@ -239,6 +202,16 @@ impl<K: MapKey, V: Codec> From<HashMap<K, V>> for TdfMap<K, V> {
 }
 
 impl<K: MapKey, V: Codec> TdfMap<K, V> {
+    pub fn only(key: impl Into<K>, value: impl Into<V>) -> TdfMap<K, V> {
+        let mut keys = Vec::with_capacity(1);
+        let mut values = Vec::with_capacity(1);
+
+        keys.push(key.into());
+        values.push(value.into());
+
+        Self { keys, values }
+    }
+
     /// Creates a new empty TdfMap
     pub fn new() -> TdfMap<K, V> {
         Self {
@@ -406,28 +379,13 @@ impl Codec for f32 {
     }
 }
 
-impl<T: AsVarInt + Copy> Codec for T {
-    fn encode(&self, output: &mut Vec<u8>) {
-        (*self).to_var_int().encode(output);
-    }
-
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let value = VarInt::decode(reader)?;
-        Ok(T::from_var_int(value))
-    }
-
-    fn value_type() -> ValueType {
-        ValueType::VarInt
-    }
-}
-
 impl Codec for bool {
     fn encode(&self, output: &mut Vec<u8>) {
-        output.push(if *self { 1 } else { 0 })
+        (if *self { 1u8 } else { 0u8 }).encode(output)
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let byte = reader.take_one()?;
+        let byte = u8::decode(reader)?;
         Ok(byte == 1)
     }
 
@@ -436,41 +394,207 @@ impl Codec for bool {
     }
 }
 
-impl Codec for VarInt {
-    fn encode(&self, output: &mut Vec<u8>) {
-        let value = self.0;
-        if value < 64 {
-            output.push(value as u8);
-        } else {
-            let mut cur_byte = ((value & 63) as u8) | 128;
-            output.push(cur_byte);
-            let mut cur_shift = value >> 6;
-            while cur_shift >= 128 {
-                cur_byte = ((cur_shift & 127) | 128) as u8;
-                cur_shift >>= 7;
-                output.push(cur_byte);
-            }
-            output.push(cur_shift as u8)
+macro_rules! impl_encode_var {
+    ($value:ident, $output:ident) => {
+        if $value < 64 {
+            $output.push($value as u8);
+            return;
         }
+        let mut byte = (($value & 63) as u8) | 128;
+        $output.push(byte);
+        let mut cur_shift = $value >> 6;
+        while cur_shift >= 128 {
+            byte = ((cur_shift & 127) | 128) as u8;
+            cur_shift >>= 7;
+            $output.push(byte);
+        }
+        $output.push(cur_shift as u8)
+    };
+}
+
+macro_rules! impl_decode_var {
+    ($ty:ty, $reader:ident) => {{
+        let first = $reader.take_one()?;
+        let mut result = (first & 63) as $ty;
+        if first < 128 {
+            return Ok(result);
+        }
+        let mut shift: u8 = 6;
+        let mut byte: u8;
+        loop {
+            byte = $reader.take_one()?;
+            result |= ((byte & 127) as $ty) << shift;
+            if byte < 128 {
+                break;
+            }
+            shift += 7;
+        }
+        Ok(result)
+    }};
+}
+
+impl Codec for u8 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        if value < 64 {
+            output.push(*self);
+            return;
+        }
+        output.push((value & 63) | 128);
+        output.push(value >> 6)
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
         let first = reader.take_one()?;
-        let mut result = (first & 63) as u64;
+        let mut result = first & 63;
         if first < 128 {
-            return Ok(VarInt(result));
+            return Ok(result);
         }
-        let mut shift = 6;
-        let mut byte: u8;
-        loop {
-            byte = reader.take_one()?;
-            result |= ((byte & 127) as u64) << shift;
-            shift += 7;
-            if byte < 128 {
-                break;
-            }
+        let byte = reader.take_one()?;
+        result |= (byte & 127) << 6;
+        if byte >= 128 {
+            reader.consume_while(|value| value >= 128);
         }
-        Ok(VarInt(result))
+        Ok(result)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for i8 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        u8::encode(&(*self as u8), output)
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        Ok(u8::decode(reader)? as i8)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for u16 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        if value < 64 {
+            output.push(value as u8);
+            return;
+        }
+        let mut byte = ((value & 63) as u8) | 128;
+        let mut shift = value >> 6;
+        output.push(byte);
+        byte = ((shift & 127) | 128) as u8;
+        shift >>= 7;
+        output.push(byte);
+        output.push(shift as u8);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(u16, reader)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for i16 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        u16::encode(&(*self as u16), output)
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(i16, reader)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for u32 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        impl_encode_var!(value, output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(u32, reader)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for i32 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        impl_encode_var!(value, output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(i32, reader)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for u64 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        impl_encode_var!(value, output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(u64, reader)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for i64 {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        impl_encode_var!(value, output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(i64, reader)
+    }
+}
+
+impl Codec for usize {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        impl_encode_var!(value, output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(usize, reader)
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::VarInt
+    }
+}
+
+impl Codec for isize {
+    fn encode(&self, output: &mut Vec<u8>) {
+        let value = *self;
+        impl_encode_var!(value, output);
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        impl_decode_var!(isize, reader)
     }
 
     fn value_type() -> ValueType {
@@ -488,13 +612,15 @@ impl Codec for &'static str {
             _ => bytes.push(0),
         }
 
-        VarInt::encode(&VarInt(bytes.len() as u64), output);
+        bytes.len().encode(output);
         output.extend_from_slice(&bytes);
     }
 
     fn decode(_reader: &mut Reader) -> CodecResult<Self> {
         // Static string cannot be decoded only encoded
-        Err(CodecError::UnknownError)
+        Err(CodecError::InvalidAction(
+            "Attempted to decode string with static lifetime",
+        ))
     }
 }
 
@@ -507,13 +633,12 @@ impl Codec for String {
             // Null terminate
             _ => bytes.push(0),
         }
-
-        VarInt::encode(&VarInt(bytes.len() as u64), output);
+        bytes.len().encode(output);
         output.extend_from_slice(&bytes);
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let length = VarInt::decode(reader)?.0 as usize;
+        let length = usize::decode(reader)?;
         let bytes = reader.take(length)?;
         let text = String::from_utf8_lossy(bytes);
         let mut text = text.to_string();
@@ -538,12 +663,12 @@ impl Blob {
 
 impl Codec for Blob {
     fn encode(&self, output: &mut Vec<u8>) {
-        VarInt(self.0.len() as u64).encode(output);
+        self.0.len().encode(output);
         output.extend_from_slice(&self.0)
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let length = VarInt::decode(reader)?.0 as usize;
+        let length = usize::decode(reader)?;
         let bytes = reader.take(length)?;
         Ok(Blob(bytes.to_vec()))
     }
@@ -556,16 +681,18 @@ impl Codec for Blob {
 /// Trait for a Codec value which can be apart of a Tdf list
 pub trait Listable: Codec {}
 
-impl<T: AsVarInt + Copy> Listable for T {}
+impl<T: VarInt> Listable for T {}
+
 impl Listable for bool {}
-impl Listable for VarInt {}
+
 impl Listable for String {}
-impl Listable for (VarInt, VarInt, VarInt) {}
+
+impl<T: VarInt> Listable for (T, T, T) {}
 
 impl<T: Listable> Codec for Vec<T> {
     fn encode(&self, output: &mut Vec<u8>) {
         T::value_type().encode(output);
-        VarInt(self.len() as u64).encode(output);
+        self.len().encode(output);
         for value in self {
             value.encode(output);
         }
@@ -577,7 +704,7 @@ impl<T: Listable> Codec for Vec<T> {
         if value_type != expected_type {
             return Err(CodecError::UnexpectedType(value_type, expected_type));
         }
-        let length = VarInt::decode(reader)?.0 as usize;
+        let length = usize::decode(reader)?;
         let mut out = Vec::with_capacity(length);
         for _ in 0..length {
             out.push(T::decode(reader)?);
@@ -616,19 +743,19 @@ impl<T: Codec> Codec for TdfOptional<T> {
     }
 }
 
-impl Codec for VarIntList {
+impl<T: VarInt> Codec for VarIntList<T> {
     fn encode(&self, output: &mut Vec<u8>) {
-        VarInt(self.0.len() as u64).encode(output);
+        self.0.len().encode(output);
         for value in &self.0 {
             value.encode(output);
         }
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let length = VarInt::decode(reader)?.0 as usize;
+        let length = usize::decode(reader)?;
         let mut out = Vec::with_capacity(length);
         for _ in 0..length {
-            out.push(VarInt::decode(reader)?)
+            out.push(T::decode(reader)?)
         }
         Ok(VarIntList(out))
     }
@@ -638,15 +765,15 @@ impl Codec for VarIntList {
     }
 }
 
-impl Codec for (VarInt, VarInt) {
+impl<T: VarInt> Codec for (T, T) {
     fn encode(&self, output: &mut Vec<u8>) {
         self.0.encode(output);
         self.1.encode(output);
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let a = VarInt::decode(reader)?;
-        let b = VarInt::decode(reader)?;
+        let a = T::decode(reader)?;
+        let b = T::decode(reader)?;
         Ok((a, b))
     }
 
@@ -655,7 +782,7 @@ impl Codec for (VarInt, VarInt) {
     }
 }
 
-impl Codec for (VarInt, VarInt, VarInt) {
+impl<T: VarInt> Codec for (T, T, T) {
     fn encode(&self, output: &mut Vec<u8>) {
         self.0.encode(output);
         self.1.encode(output);
@@ -663,9 +790,9 @@ impl Codec for (VarInt, VarInt, VarInt) {
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let a = VarInt::decode(reader)?;
-        let b = VarInt::decode(reader)?;
-        let c = VarInt::decode(reader)?;
+        let a = T::decode(reader)?;
+        let b = T::decode(reader)?;
+        let c = T::decode(reader)?;
         Ok((a, b, c))
     }
 
@@ -677,6 +804,7 @@ impl Codec for (VarInt, VarInt, VarInt) {
 #[cfg(test)]
 mod test {
     use crate::types::TdfMap;
+    use crate::{Codec, Reader};
 
     #[test]
     fn test() {
@@ -688,5 +816,27 @@ mod test {
         assert_eq!(value.unwrap(), "Abc");
 
         println!("{value:?}")
+    }
+
+    #[test]
+    fn test_u8() {
+        for value in u8::MIN..u8::MAX {
+            let mut out = Vec::with_capacity(4);
+            value.encode(&mut out);
+            let mut reader = Reader::new(&out);
+            let v2 = u8::decode(&mut reader).unwrap();
+            assert_eq!(value, v2)
+        }
+    }
+
+    #[test]
+    fn test_u16() {
+        for value in u16::MIN..u16::MAX {
+            let mut out = Vec::new();
+            value.encode(&mut out);
+            let mut reader = Reader::new(&out);
+            let v2 = u16::decode(&mut reader).unwrap();
+            assert_eq!(value, v2)
+        }
     }
 }

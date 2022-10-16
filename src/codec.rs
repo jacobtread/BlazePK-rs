@@ -43,6 +43,17 @@ impl<'a> Reader<'a> {
         Ok(byte)
     }
 
+    /// Consumes every byte until the condition function fails
+    pub fn consume_while<F: Fn(u8) -> bool>(&mut self, test: F) {
+        while self.cursor < self.buffer.len() {
+            let byte = self.buffer[self.cursor];
+            if !test(byte) {
+                break;
+            }
+            self.cursor += 1;
+        }
+    }
+
     /// Step back a cursor position
     pub fn step_back(&mut self) {
         self.cursor -= 1;
@@ -64,6 +75,7 @@ pub enum CodecError {
     NotEnoughBytes(usize, usize, usize),
     UnknownError,
     DecodedTwice,
+    InvalidAction(&'static str),
 }
 
 impl Debug for CodecError {
@@ -98,6 +110,9 @@ impl Debug for CodecError {
                 f.write_str("Unknown error occurred when trying to fit bytes")
             }
             CodecError::DecodedTwice => f.write_str("Attempted to decode packet contents twice"),
+            CodecError::InvalidAction(value) => {
+                write!(f, "Attempt invalid action: {value}")
+            }
         }
     }
 }
@@ -140,7 +155,7 @@ pub trait Codec: Sized {
 }
 
 /// Attempts to decode a u16 value from the provided slice
-pub fn decode_u16(value: &[u8]) -> CodecResult<u16> {
+pub fn decode_u16_be(value: &[u8]) -> CodecResult<u16> {
     Ok(u16::from_be_bytes(
         value.try_into().map_err(|_| CodecError::UnknownError)?,
     ))
@@ -148,7 +163,7 @@ pub fn decode_u16(value: &[u8]) -> CodecResult<u16> {
 
 /// Encodes the provided u16 value to bytes and extends
 /// the output slice with the bytes
-pub fn encode_u16(value: &u16, output: &mut Vec<u8>) {
+pub fn encode_u16_be(value: &u16, output: &mut Vec<u8>) {
     let bytes = value.to_be_bytes();
     output.extend_from_slice(&bytes);
 }
