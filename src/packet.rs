@@ -31,24 +31,6 @@ impl From<io::Error> for PacketError {
 /// Result type for returning a value or Packet Error
 pub type PacketResult<T> = Result<T, PacketError>;
 
-/// Empty content type for packets
-#[derive(Debug)]
-pub struct EmptyContent {}
-
-impl Codec for EmptyContent {
-    fn encode(&self, _: &mut Vec<u8>) {}
-
-    fn decode(_: &mut Reader) -> CodecResult<Self> {
-        Ok(EmptyContent {})
-    }
-}
-
-impl PacketContent for EmptyContent {}
-
-/// Trait implemented by Codec values that can be used
-/// as packet contents
-pub trait PacketContent: Codec + Debug {}
-
 /// Trait for implementing packet target details
 pub trait PacketComponent: Debug + Eq + PartialEq {
     fn command(&self) -> u16;
@@ -203,7 +185,7 @@ impl PacketHeader {
 /// Structure for a packet created by ourselves where
 /// the data contents are already known and not encoded
 #[derive(Debug)]
-pub struct Packet<C: PacketContent>(pub PacketHeader, pub C);
+pub struct Packet<C: Codec>(pub PacketHeader, pub C);
 
 /// Structure for storing functions related to creation of packets
 pub struct Packets {}
@@ -211,7 +193,7 @@ pub struct Packets {}
 impl Packets {
     /// Creates a new response packet for responding to the provided
     /// decodable packet. With the `contents`
-    pub fn response<C: PacketContent>(packet: &OpaquePacket, contents: &C) -> OpaquePacket {
+    pub fn response<C: Codec>(packet: &OpaquePacket, contents: &C) -> OpaquePacket {
         let mut header = packet.0.clone();
         header.ty = PacketType::Response;
         OpaquePacket(header, contents.encode_bytes())
@@ -227,7 +209,7 @@ impl Packets {
 
     /// Creates a new error response packet for responding to the
     /// provided packet with an error number with `contents`
-    pub fn error<C: PacketContent>(
+    pub fn error<C: Codec>(
         packet: &OpaquePacket,
         error: impl Into<u16>,
         contents: &C,
@@ -249,10 +231,7 @@ impl Packets {
 
     /// Creates a new notify packet with the provided component and command
     /// and `contents`
-    pub fn notify<C: PacketContent, T: PacketComponents>(
-        component: T,
-        contents: &C,
-    ) -> OpaquePacket {
+    pub fn notify<C: Codec, T: PacketComponents>(component: T, contents: &C) -> OpaquePacket {
         let (component, command) = component.values();
         OpaquePacket(
             PacketHeader {
@@ -281,7 +260,7 @@ impl Packets {
 
     /// Creates a new request packet retrieving its ID from the provided
     /// request counter.
-    pub fn request<R: RequestCounter, C: PacketContent, T: PacketComponents>(
+    pub fn request<R: RequestCounter, C: Codec, T: PacketComponents>(
         counter: &mut R,
         component: T,
         contents: &C,
@@ -319,7 +298,7 @@ impl Packets {
     }
 }
 
-impl<C: PacketContent> Packet<C> {
+impl<C: Codec> Packet<C> {
     /// Converts this packet into an opaque packet
     pub fn opaque(self) -> OpaquePacket {
         let contents = self.1.encode_bytes();
@@ -418,7 +397,7 @@ impl<C: PacketContent> Packet<C> {
     }
 }
 
-impl<C: PacketContent> TryInto<Packet<C>> for OpaquePacket {
+impl<C: Codec> TryInto<Packet<C>> for OpaquePacket {
     type Error = CodecError;
 
     fn try_into(self) -> Result<Packet<C>, Self::Error> {
@@ -435,7 +414,7 @@ pub struct OpaquePacket(pub PacketHeader, pub Vec<u8>);
 impl OpaquePacket {
     /// Reads the contents of this encoded packet and tries to decode
     /// the `R` from it.
-    pub fn contents<R: PacketContent>(&self) -> CodecResult<R> {
+    pub fn contents<R: Codec>(&self) -> CodecResult<R> {
         let mut reader = Reader::new(&self.1);
         R::decode(&mut reader)
     }

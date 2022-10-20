@@ -129,7 +129,11 @@ pub trait Codec: Sized {
     /// Function for implementing decoding of Self from
     /// the provided Reader. Will return None if self
     /// cannot be decoded
-    fn decode(reader: &mut Reader) -> CodecResult<Self>;
+    fn decode(_reader: &mut Reader) -> CodecResult<Self> {
+        Err(CodecError::InvalidAction(
+            "Not allowed to decode this codec type",
+        ))
+    }
 
     /// Function to provide functionality for skipping this
     /// data type (e.g. read the bytes without using them)

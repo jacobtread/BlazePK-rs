@@ -38,7 +38,6 @@ macro_rules! packet {
         }
 
         /// Trait fitting implementations
-        impl $crate::PacketContent for $name {}
         impl $crate::Listable for $name {}
 
         impl $crate::Codec for $name {
