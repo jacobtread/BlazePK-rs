@@ -1,5 +1,6 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
 use crate::tag::{TaggedValue, ValueType};
+use crate::Tag;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -602,23 +603,92 @@ impl Codec for isize {
     }
 }
 
+#[inline]
+pub fn tag_zero(output: &mut Vec<u8>, tag: &str) {
+    Tag::encode_from(tag, &ValueType::VarInt, output);
+    output.push(0);
+}
+
+#[inline]
+pub fn tag_u8(output: &mut Vec<u8>, tag: &str, value: u8) {
+    Tag::encode_from(tag, &ValueType::VarInt, output);
+    value.encode(output);
+}
+
+#[inline]
+pub fn tag_u16(output: &mut Vec<u8>, tag: &str, value: u16) {
+    Tag::encode_from(tag, &ValueType::VarInt, output);
+    value.encode(output);
+}
+
+#[inline]
+pub fn tag_u32(output: &mut Vec<u8>, tag: &str, value: u32) {
+    Tag::encode_from(tag, &ValueType::VarInt, output);
+    value.encode(output);
+}
+
+#[inline]
+pub fn tag_usize(output: &mut Vec<u8>, tag: &str, value: usize) {
+    Tag::encode_from(tag, &ValueType::VarInt, output);
+    value.encode(output);
+}
+
+#[inline]
+pub fn tag_u64(output: &mut Vec<u8>, tag: &str, value: u64) {
+    Tag::encode_from(tag, &ValueType::VarInt, output);
+    value.encode(output);
+}
+
+#[inline]
+pub fn tag_empty_str(output: &mut Vec<u8>, tag: &str) {
+    Tag::encode_from(tag, &ValueType::String, output);
+    encode_empty_str(output);
+}
+
+#[inline]
+pub fn tag_str(output: &mut Vec<u8>, tag: &str, value: &str) {
+    Tag::encode_from(tag, &ValueType::String, output);
+    encode_str(value, output);
+}
+
 pub fn encode_empty_str(output: &mut Vec<u8>) {
     output.push(1);
     output.push(0);
 }
 
-impl Codec for &'static str {
-    fn encode(&self, output: &mut Vec<u8>) {
-        let mut bytes = self.as_bytes().to_vec();
-        match bytes.last() {
-            // Ignore if already null terminated
-            Some(0) => {}
-            // Null terminate
-            _ => bytes.push(0),
-        }
+#[inline]
+pub fn tag_group_start(output: &mut Vec<u8>, tag: &str) {
+    Tag::encode_from(tag, &ValueType::Group, output);
+}
 
-        bytes.len().encode(output);
-        output.extend_from_slice(&bytes);
+#[inline]
+pub fn tag_list_start(output: &mut Vec<u8>, tag: &str, ty: ValueType, len: usize) {
+    Tag::encode_from(tag, &ValueType::Group, output);
+    ty.encode(output);
+    len.encode(output);
+}
+
+#[inline]
+pub fn tag_group_end(output: &mut Vec<u8>) {
+    output.push(0)
+}
+
+pub fn encode_str(value: &str, output: &mut Vec<u8>) {
+    let mut bytes = value.as_bytes().to_vec();
+    match bytes.last() {
+        // Ignore if already null terminated
+        Some(0) => {}
+        // Null terminate
+        _ => bytes.push(0),
+    }
+
+    bytes.len().encode(output);
+    output.extend_from_slice(&bytes);
+}
+
+impl Codec for &'_ str {
+    fn encode(&self, output: &mut Vec<u8>) {
+        encode_str(self, output);
     }
 
     fn decode(_reader: &mut Reader) -> CodecResult<Self> {
@@ -631,15 +701,7 @@ impl Codec for &'static str {
 
 impl Codec for String {
     fn encode(&self, output: &mut Vec<u8>) {
-        let mut bytes = self.as_bytes().to_vec();
-        match bytes.last() {
-            // Ignore if already null terminated
-            Some(0) => {}
-            // Null terminate
-            _ => bytes.push(0),
-        }
-        bytes.len().encode(output);
-        output.extend_from_slice(&bytes);
+        encode_str(self, output);
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {

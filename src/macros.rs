@@ -57,6 +57,19 @@ macro_rules! packet {
     };
 }
 
+#[macro_export]
+macro_rules! tag_group {
+    ($output:ident, $tag:literal, $content:block) => {
+        $crate::tag_group_start($output, $tag);
+
+        {
+            $content
+        }
+
+        $crate::tag_group_end($output);
+    };
+}
+
 /// Macro for generating encoding for a field with with a tag and field
 #[macro_export]
 macro_rules! encode_field {
