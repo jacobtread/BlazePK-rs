@@ -305,7 +305,11 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
 
     /// Takes the value stored at the provided key out of
     /// the map taking ownership this also removes the key.
-    pub fn take(&mut self, key: &K) -> Option<V> {
+    pub fn take<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: Eq,
+    {
         let index = self.index_of_key(key)?;
         let value = self.values.remove(index);
         self.keys.remove(index);
@@ -663,7 +667,20 @@ pub fn tag_group_start(output: &mut Vec<u8>, tag: &str) {
 
 #[inline]
 pub fn tag_list_start(output: &mut Vec<u8>, tag: &str, ty: ValueType, len: usize) {
-    Tag::encode_from(tag, &ValueType::Group, output);
+    Tag::encode_from(tag, &ValueType::List, output);
+    ty.encode(output);
+    len.encode(output);
+}
+
+#[inline]
+pub fn tag_map_start(
+    output: &mut Vec<u8>,
+    tag: &str,
+    key: ValueType,
+    value: ValueType,
+    len: usize,
+) {
+    Tag::encode_from(tag, &ValueType::Map, output);
     ty.encode(output);
     len.encode(output);
 }
