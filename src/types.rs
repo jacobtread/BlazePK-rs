@@ -681,7 +681,8 @@ pub fn tag_map_start(
     len: usize,
 ) {
     Tag::encode_from(tag, &ValueType::Map, output);
-    ty.encode(output);
+    key.encode(output);
+    value.encode(output);
     len.encode(output);
 }
 
