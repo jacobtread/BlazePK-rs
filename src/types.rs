@@ -673,6 +673,21 @@ pub fn tag_list_start(output: &mut Vec<u8>, tag: &str, ty: ValueType, len: usize
 }
 
 #[inline]
+pub fn tag_var_int_list_empty(output: &mut Vec<u8>, tag: &str) {
+    Tag::encode_from(tag, &ValueType::VarIntList, output);
+    output.push(0);
+}
+
+#[inline]
+pub fn tag_var_int_list<T: VarInt>(output: &mut Vec<u8>, tag: &str, values: Vec<T>) {
+    Tag::encode_from(tag, &ValueType::VarIntList, output);
+    values.len().encode(output);
+    for value in values {
+        value.encode(output);
+    }
+}
+
+#[inline]
 pub fn tag_map_start(
     output: &mut Vec<u8>,
     tag: &str,
