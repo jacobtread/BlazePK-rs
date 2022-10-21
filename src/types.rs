@@ -691,6 +691,22 @@ pub fn tag_group_end(output: &mut Vec<u8>) {
     output.push(0)
 }
 
+#[inline]
+pub fn tag_triple<A: VarInt, B: VarInt, C: VarInt>(
+    output: &mut Vec<u8>,
+    tag: &str,
+    value: &(A, B, C),
+) {
+    Tag::encode_from(tag, &ValueType::Triple, output);
+    value.encode(output);
+}
+
+#[inline]
+pub fn tag_pair<A: VarInt, B: VarInt>(output: &mut Vec<u8>, tag: &str, value: &(A, B)) {
+    Tag::encode_from(tag, &ValueType::Pair, output);
+    value.encode(output);
+}
+
 pub fn encode_str(value: &str, output: &mut Vec<u8>) {
     let mut bytes = value.as_bytes().to_vec();
     match bytes.last() {
