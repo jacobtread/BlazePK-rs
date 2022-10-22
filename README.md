@@ -35,32 +35,36 @@ the following table lists the following
 
 > The types u8 - u64 and i8 - i64 are cast to u64 and encoded using the VarInt encoding
 
+> VarInt = u8, u16, u32, u64, i8, i16, i32, i64, usize, isize
 
-| Type                                 | Details                                         |
-|--------------------------------------|-------------------------------------------------|
-| u8, u16, u32, u64, i8, i16, i32, i64 | Converted to VarInt                             |
-| VarInt                               | Variable length integer value                   |
-| String                               | Text encoded will a null terminator             |
-| Vec\<u8>                             | Blob of bytes                                   |
-| Group                                | Group created with the group!() macro           |
-| Vec<String,VarInt,Float,Group>       | List of values                                  |
-| TdfMap<String,VarInt, Any*>          | Map of keys to values                           |
-| TdfOptional<Any*>                    | Tdf value where value could be absent           |
-| VarIntList                           | List of variable length integers                |
-| (VarInt, VarInt)                     | Pair of two VarInts                             |
-| (VarInt, VarInt, VarInt)             | Tuple of three VarInts                          |
-| f32                                  | Only floating point type supported              |
-| bool                                 | Booleans are VarInts encoded with Zeros or Ones |
+| Type                           | Details                                         |
+|--------------------------------|-------------------------------------------------|
+| VarInt                         | Encoded using variable length int encoding      |
+| String                         | Text encoded will a null terminator             |
+| Blob                           | Blob of bytes (wrapps a Vec of u8)              |
+| Group                          | Group created with the group!() macro           |
+| Vec<String,VarInt,Float,Group> | List of values                                  |
+| TdfMap<String,VarInt, Any*>    | Map of keys to values                           |
+| TdfOptional<Any*>              | Tdf value where value could be absent           |
+| VarIntList                     | List of variable length integers                |
+| (VarInt, VarInt)               | Pair of two VarInts                             |
+| (VarInt, VarInt, VarInt)       | Tuple of three VarInts                          |
+| f32                            | Only floating point type supported              |
+| bool                           | Booleans are VarInts encoded with Zeros or Ones |
 
+
+Fields are specified with {TAG} {NAME}: {TYPE} where {TAG} is the actual TDF tag
+(This must be uppercase and must be in the correct order) and {NAME} is the name of
+the Rust struct field
 
 ```rust
 use blaze_pk::packet;
 
 packet! {
     struct MyPacket {
-        TEST: u32,
-        STR: String,
-        BLOB: Vec<u8>
+        TEST test: u32,
+        STR string: String,
+        BLOB blob: Vec<u8>
     }
 }
 ```
@@ -74,14 +78,15 @@ of this is the following
 > 🚩 **IMPORTANT** 🚩 Everything previously mentioned for creating packets also applies to creating
 > groups so keep that in mind when creating them.
 
+
 ```rust
 use blaze_pk::group;
 
 group! {
     struct MyGroup {
-        TEST: u32,
-        STR: String,
-        BLOB: Vec<u8>
+        TEST test: u32,
+        STR string: String,
+        BLOB blob: Vec<u8>
     }
 }
 
@@ -95,17 +100,17 @@ use blaze_pk::{packet, group};
 
 group! {
     struct MyGroup {
-        TEST: u32,
-        STR: String,
-        BLOB: Vec<u8>
+        TEST test: u32,
+        STR string: String,
+        BLOB blob: Vec<u8>
     }
 }
 
 packet! {
     struct MyPacket {
-        TEST: u32,
-        STR: String,
-        MY: MyGroup
+        TEST test: u32,
+        STR string: String,
+        MY my_group: MyGroup
     }
 }
 ```
@@ -137,28 +142,30 @@ define_components! {
 }
 ```
 
-This will generate a module named "components" with the following enums for you to use
-these enums implement the PacketComponent trait which maps the component and command
-values to these enums.
-
+This will generate an enum named Components which contains mappings to all the 
 ```rust
-pub mod components {
-    #[derive(Debug, Eq, PartialEq)]
-    pub enum Authentication {
-        First,
-        Second,
-        Third,
-        Unknown(u16),
-    }
-    
-    #[derive(Debug, Eq, PartialEq)]
-    pub enum Other {
-        First,
-        Second,
-        Third,
-        Unknown(u16),
-    }
+#[derive(Debug, Eq, PartialEq)]
+pub enum Components {
+    Authentication(Authentication),
+    Other(Other)
 }
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Authentication {
+    First,
+    Second,
+    Third,
+    Unknown(u16),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Other {
+    First,
+    Second,
+    Third,
+    Unknown(u16),
+}
+
 ```
 
 ### Creating a packet
