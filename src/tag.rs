@@ -1,6 +1,8 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
 use crate::types::{VarIntList, EMPTY_OPTIONAL};
+use crate::{Blob, TdfOptional};
 use std::fmt::Debug;
+use std::thread::park;
 
 /// Tag for a Tdf value. This contains the String tag for naming
 /// the field and then the type of the field
@@ -78,91 +80,144 @@ impl Tag {
         Ok(())
     }
 
-    /// Discards everything printing out everything it hits
-    pub fn debug_discard(reader: &mut Reader) -> CodecResult<()> {
+    pub fn stringify(reader: &mut Reader, out: &mut String, indent: usize) -> CodecResult<()> {
         while reader.remaining() > 0 {
-            let tag = Tag::decode(reader)?;
-            println!("{tag:?}");
-            Self::debug_discard_type(&tag.1, reader)?;
+            Self::create_string_tag(reader, out, indent)?;
         }
         Ok(())
     }
 
-    /// Discards a type printing out everything it hits
-    fn debug_discard_type(ty: &ValueType, reader: &mut Reader) -> CodecResult<()> {
+    pub fn create_string_tag(
+        reader: &mut Reader,
+        out: &mut String,
+        indent: usize,
+    ) -> CodecResult<()> {
+        let tag = Tag::decode(reader)?;
+        out.push_str(&"  ".repeat(indent));
+        out.push_str(&format!("\"{} ({:?})\": ", &tag.0, &tag.1));
+        Self::create_string_type(reader, out, indent, &tag.1)?;
+        out.push_str(",\n");
+        Ok(())
+    }
+
+    pub fn create_string_type(
+        reader: &mut Reader,
+        out: &mut String,
+        indent: usize,
+        ty: &ValueType,
+    ) -> CodecResult<()> {
         match ty {
             ValueType::VarInt => {
-                let value = usize::decode(reader)?;
-                println!("VarInt: {value:?}");
+                let value = u64::decode(reader)?;
+                out.push_str(&value.to_string());
             }
             ValueType::String => {
                 let value = String::decode(reader)?;
-                println!("String: {value:?}");
+                out.push('"');
+                out.push_str(&value);
+                out.push('"');
             }
             ValueType::Blob => {
-                let value = <Vec<u8>>::decode(reader)?;
-                println!("Blob: {value:?}");
+                let value = Blob::decode(reader)?;
+                out.push_str("Blob[");
+                for b in value.0 {
+                    out.push_str(&format!("0x{:X}", b));
+                }
+                out.push(']');
             }
             ValueType::Group => {
-                println!("Start group");
-                while let Ok(next_byte) = reader.take_one() {
+                out.push_str("Group {\n");
+                while let next_byte = reader.take_one()? {
                     if next_byte == 0 {
                         break;
                     }
                     if next_byte != 2 {
                         reader.step_back();
                     }
-                    let tag = Tag::decode(reader)?;
-                    println!("{tag:?}");
-                    Self::debug_discard_type(&tag.1, reader)?;
+                    Self::create_string_tag(reader, out, indent + 1)?;
                 }
-                println!("End group");
+                out.push_str("}");
             }
             ValueType::List => {
-                let new_ty = ValueType::decode(reader)?;
-                println!("List Type: {new_ty:?}");
+                let value_type = ValueType::decode(reader)?;
                 let length = usize::decode(reader)?;
-                println!("STart list");
-                for _ in 0..length {
-                    Self::debug_discard_type(&new_ty, reader)?;
+
+                let nl = match value_type {
+                    ValueType::Map | ValueType::Group => true,
+                    _ => false,
+                };
+
+                out.push_str(&format!("List<{:?}>", value_type));
+                out.push('[');
+                if nl {
+                    out.push('\n')
                 }
-                println!("End list")
+
+                for _ in 0..length {
+                    if nl {
+                        out.push_str(&"  ".repeat(indent + 1));
+                    }
+                    Self::create_string_type(reader, out, indent + 1, &value_type)?;
+
+                    if nl {
+                        out.push('\n')
+                    }
+                }
+
+                out.push(']');
             }
             ValueType::Map => {
-                let key_ty = ValueType::decode(reader)?;
-                println!("Map Key Type: {key_ty:?}");
-                let value_ty = ValueType::decode(reader)?;
-                println!("Map Value Type: {value_ty:?}");
+                let key_type = ValueType::decode(reader)?;
+                let value_type = ValueType::decode(reader)?;
                 let length = usize::decode(reader)?;
+                out.push_str(&format!("Map<{:?}, {:?}>", key_type, value_type));
+                out.push('{');
+
                 for _ in 0..length {
-                    Self::debug_discard_type(&key_ty, reader)?;
-                    Self::debug_discard_type(&value_ty, reader)?;
+                    out.push_str(&"  ".repeat(indent + 1));
+
+                    Self::create_string_type(reader, out, indent + 1, &key_type)?;
+
+                    out.push_str(": ");
+
+                    Self::create_string_type(reader, out, indent + 1, &value_type)?;
+
+                    out.push('\n')
                 }
+
+                out.push_str(&"  ".repeat(indent));
+                out.push('}');
             }
             ValueType::Optional => {
                 let ty = reader.take_one()?;
-                println!("Optional Type {ty}");
                 if ty != EMPTY_OPTIONAL {
-                    let new_ty = ValueType::decode(reader)?;
-                    println!("Optional Value {new_ty:?}");
-                    Self::debug_discard_type(&new_ty, reader)?;
+                    out.push_str("Optional(");
+                    let value_type = ValueType::decode(reader)?;
+                    Self::create_string_type(reader, out, indent + 1, &value_type)?;
+                    out.push_str(")")
+                } else {
+                    out.push_str("Optional(Empty)");
                 }
             }
             ValueType::VarIntList => {
-                let list = VarIntList::<usize>::decode(reader)?;
-                println!("VarIntList {list:?}");
+                let value = VarIntList::<usize>::decode(reader)?;
+                out.push_str("VarList[");
+                for b in value.0 {
+                    out.push_str(&format!("0x{:X}", b));
+                }
+                out.push(']');
             }
             ValueType::Pair => {
                 let pair = <(usize, usize)>::decode(reader)?;
-                println!("Pair {pair:?}");
+                out.push_str(&format!("({},{})", &pair.0, &pair.1));
             }
             ValueType::Triple => {
                 let value = <(usize, usize, usize)>::decode(reader)?;
-                println!("Triple {value:?}")
+                out.push_str(&format!("({},{}, {})", &value.0, &value.1, &value.2));
             }
             ValueType::Float => {
                 let value = f32::decode(reader)?;
-                println!("Float {value:?}")
+                out.push_str(&value.to_string());
             }
             ValueType::Unknown(_) => {}
         }

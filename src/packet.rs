@@ -422,7 +422,14 @@ impl OpaquePacket {
     /// Debug decoding decodes self printing all the hit nodes
     pub fn debug_decode(&self) -> CodecResult<()> {
         let mut reader = Reader::new(&self.1);
-        Tag::debug_discard(&mut reader)?;
+        let mut out = String::new();
+        out.push_str(&format!(
+            "packet({:?}, {:?}) {{\n",
+            self.0.component, self.0.command
+        ));
+        Tag::stringify(&mut reader, &mut out, 1)?;
+        out.push('}');
+        println!("{}", out);
         Ok(())
     }
 
