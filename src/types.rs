@@ -794,18 +794,7 @@ impl Codec for Blob {
     }
 }
 
-/// Trait for a Codec value which can be apart of a Tdf list
-pub trait Listable: Codec {}
-
-impl<T: VarInt> Listable for T {}
-
-impl Listable for bool {}
-
-impl Listable for String {}
-
-impl<A: VarInt, B: VarInt, C: VarInt> Listable for (A, B, C) {}
-
-impl<T: Listable> Codec for Vec<T> {
+impl<T: Codec> Codec for Vec<T> {
     fn encode(&self, output: &mut Vec<u8>) {
         T::value_type().encode(output);
         self.len().encode(output);

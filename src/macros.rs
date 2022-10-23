@@ -38,8 +38,6 @@ macro_rules! packet {
         }
 
         /// Trait fitting implementations
-        impl $crate::Listable for $name {}
-
         impl $crate::Codec for $name {
 
             fn encode(&self, output: &mut Vec<u8>) {
@@ -122,8 +120,6 @@ macro_rules! group {
             $(pub $field: $ty),*
         }
 
-        impl $crate::Listable for $name {}
-
         impl $crate::Codec for $name {
 
             fn encode(&self, output: &mut Vec<u8>) {
@@ -157,8 +153,6 @@ macro_rules! group {
         pub struct $name {
             $(pub $field: $ty),*
         }
-
-        impl $crate::Listable for $name {}
 
         impl $crate::Codec for $name {
 

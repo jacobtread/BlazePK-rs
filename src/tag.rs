@@ -1,6 +1,6 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
 use crate::types::{VarIntList, EMPTY_OPTIONAL};
-use crate::{Blob, TdfOptional};
+use crate::Blob;
 use std::fmt::Debug;
 
 /// Tag for a Tdf value. This contains the String tag for naming
@@ -144,7 +144,8 @@ impl Tag {
             }
             ValueType::Group => {
                 out.push_str("Group {\n");
-                while let next_byte = reader.take_one()? {
+                loop {
+                    let next_byte = reader.take_one()?;
                     if next_byte == 0 {
                         break;
                     }
