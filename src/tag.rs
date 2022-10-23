@@ -2,7 +2,6 @@ use crate::codec::{Codec, CodecError, CodecResult, Reader};
 use crate::types::{VarIntList, EMPTY_OPTIONAL};
 use crate::{Blob, TdfOptional};
 use std::fmt::Debug;
-use std::thread::park;
 
 /// Tag for a Tdf value. This contains the String tag for naming
 /// the field and then the type of the field
@@ -36,37 +35,38 @@ impl<T: Codec> Codec for TaggedValue<T> {
 }
 
 impl Tag {
-    /// Reads through the provided reader until a tag with
-    /// the provided tag and value type is met returning null
-    /// if no more tags were found or the tag was found but was
-    /// not of the right type
-    pub fn expect_tag(
-        tag: &'static str,
-        value_type: &ValueType,
-        reader: &mut Reader,
-    ) -> CodecResult<Tag> {
+    pub fn expect<T: Codec>(reader: &mut Reader, tag: &'static str) -> CodecResult<T> {
+        let expected_type = T::value_type();
         loop {
-            match Tag::decode(reader) {
-                Ok(read_tag) => {
-                    if read_tag.0.eq(tag) {
-                        if read_tag.1.ne(value_type) {
-                            return Err(CodecError::UnexpectedFieldType(
-                                tag,
-                                value_type.clone(),
-                                read_tag.1.clone(),
-                            ));
-                        }
-
-                        return Ok(read_tag);
-                    } else {
-                        Self::discard_type(&read_tag.1, reader)?;
-                    }
-                }
+            let decoded = match Self::decode(reader) {
+                Ok(tag) => tag,
                 Err(CodecError::NotEnoughBytes(_, _, _)) => {
-                    return Err(CodecError::MissingField(tag));
+                    return Err(CodecError::MissingField(tag))
                 }
                 Err(err) => return Err(err),
+            };
+            if decoded.0.ne(tag) {
+                Self::discard_type(&decoded.1, reader)?;
+                continue;
             }
+
+            if decoded.1.ne(&expected_type) {
+                return Err(CodecError::UnexpectedFieldType(
+                    tag,
+                    expected_type.clone(),
+                    decoded.1.clone(),
+                ));
+            }
+
+            return T::decode(reader);
+        }
+    }
+
+    pub fn try_expect<T: Codec>(reader: &mut Reader, tag: &'static str) -> CodecResult<Option<T>> {
+        match Self::expect(reader, tag) {
+            Err(CodecError::MissingField(_)) => Ok(None),
+            Ok(value) => Ok(Some(value)),
+            Err(err) => Err(err),
         }
     }
 

@@ -6,12 +6,17 @@ use std::fmt::{Debug, Formatter};
 pub struct Reader<'a> {
     buffer: &'a [u8],
     cursor: usize,
+    marker: usize,
 }
 
 impl<'a> Reader<'a> {
     /// Creates a new reader for the provided buffer
     pub fn new(buffer: &[u8]) -> Reader {
-        Reader { buffer, cursor: 0 }
+        Reader {
+            buffer,
+            cursor: 0,
+            marker: 0,
+        }
     }
 
     /// Attempts to take a slice of the buffer after
@@ -63,6 +68,14 @@ impl<'a> Reader<'a> {
     /// the cursor
     pub fn remaining(&self) -> usize {
         self.buffer.len() - self.cursor
+    }
+
+    pub fn mark(&mut self) {
+        self.marker = self.cursor;
+    }
+
+    pub fn reset_marker(&mut self) {
+        self.cursor = self.marker;
     }
 }
 
@@ -126,7 +139,7 @@ pub type CodecResult<T> = Result<T, CodecError>;
 pub trait Codec: Sized {
     /// Function for implementing encoding of Self to the
     /// provided vec of bytes
-    fn encode(&self, output: &mut Vec<u8>);
+    fn encode(&self, _output: &mut Vec<u8>) {}
 
     /// Function for implementing decoding of Self from
     /// the provided Reader. Will return None if self

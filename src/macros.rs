@@ -99,8 +99,7 @@ macro_rules! encode_empty_str {
 #[macro_export]
 macro_rules! decode_field {
     ($reader:ident, $tag:ident, $field:ident, $ty:ty) => {
-        $crate::Tag::expect_tag(stringify!($tag), &(<$ty>::value_type()), $reader)?;
-        let $field = <$ty>::decode($reader)
+        let $field = $crate::Tag::expect::<$ty>($reader, stringify!($tag))
             .map_err(|err| $crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
     };
 }
