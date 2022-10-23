@@ -76,6 +76,7 @@ pub enum CodecError {
     UnknownError,
     DecodedTwice,
     InvalidAction(&'static str),
+    Other(&'static str),
 }
 
 impl Debug for CodecError {
@@ -113,6 +114,7 @@ impl Debug for CodecError {
             CodecError::InvalidAction(value) => {
                 write!(f, "Attempt invalid action: {value}")
             }
+            CodecError::Other(err) => f.write_str(err),
         }
     }
 }

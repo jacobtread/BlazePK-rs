@@ -82,7 +82,17 @@ impl Tag {
 
     pub fn stringify(reader: &mut Reader, out: &mut String, indent: usize) -> CodecResult<()> {
         while reader.remaining() > 0 {
-            Self::create_string_tag(reader, out, indent)?;
+            match Self::create_string_tag(reader, out, indent) {
+                Ok(_) => {}
+                Err(err) => {
+                    out.push_str(&format!(
+                        "... remaining {}, cause: {:?}",
+                        reader.remaining(),
+                        err
+                    ));
+                    break;
+                }
+            };
         }
         Ok(())
     }
@@ -95,9 +105,16 @@ impl Tag {
         let tag = Tag::decode(reader)?;
         out.push_str(&"  ".repeat(indent));
         out.push_str(&format!("\"{} ({:?})\": ", &tag.0, &tag.1));
-        Self::create_string_type(reader, out, indent, &tag.1)?;
-        out.push_str(",\n");
-        Ok(())
+        return match Self::create_string_type(reader, out, indent, &tag.1) {
+            Ok(_) => {
+                out.push_str(",\n");
+                Ok(())
+            }
+            Err(err) => {
+                out.push_str("...");
+                Err(err)
+            }
+        };
     }
 
     pub fn create_string_type(
@@ -136,6 +153,7 @@ impl Tag {
                     }
                     Self::create_string_tag(reader, out, indent + 1)?;
                 }
+                out.push_str(&"  ".repeat(indent));
                 out.push_str("}");
             }
             ValueType::List => {
@@ -164,6 +182,9 @@ impl Tag {
                     }
                 }
 
+                if nl {
+                    out.push_str(&"  ".repeat(indent));
+                }
                 out.push(']');
             }
             ValueType::Map => {
@@ -192,8 +213,10 @@ impl Tag {
                 let ty = reader.take_one()?;
                 if ty != EMPTY_OPTIONAL {
                     out.push_str("Optional(");
-                    let value_type = ValueType::decode(reader)?;
-                    Self::create_string_type(reader, out, indent + 1, &value_type)?;
+                    let tag = Tag::decode(reader)?;
+                    out.push_str(&format!("\"{} ({:?})\": ", &tag.0, &tag.1));
+                    Self::create_string_type(reader, out, indent + 1, &tag.1)?;
+                    out.push_str(&"  ".repeat(indent));
                     out.push_str(")")
                 } else {
                     out.push_str("Optional(Empty)");
@@ -219,7 +242,7 @@ impl Tag {
                 let value = f32::decode(reader)?;
                 out.push_str(&value.to_string());
             }
-            ValueType::Unknown(_) => {}
+            ValueType::Unknown(_) => return Err(CodecError::Other("Unknown tag type")),
         }
         Ok(())
     }
