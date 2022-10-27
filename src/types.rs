@@ -650,6 +650,12 @@ pub fn tag_empty_str(output: &mut Vec<u8>, tag: &str) {
 }
 
 #[inline]
+pub fn tag_empty_blob(output: &mut Vec<u8>, tag: &str) {
+    Tag::encode_from(tag, &ValueType::Blob, output);
+    output.push(0);
+}
+
+#[inline]
 pub fn tag_str(output: &mut Vec<u8>, tag: &str, value: &str) {
     Tag::encode_from(tag, &ValueType::String, output);
     encode_str(value, output);

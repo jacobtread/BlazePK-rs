@@ -63,8 +63,12 @@ impl Tag {
     }
 
     pub fn try_expect<T: Codec>(reader: &mut Reader, tag: &'static str) -> CodecResult<Option<T>> {
+        reader.mark();
         match Self::expect(reader, tag) {
-            Err(CodecError::MissingField(_)) => Ok(None),
+            Err(CodecError::MissingField(_)) => {
+                reader.reset_marker();
+                Ok(None)
+            }
             Ok(value) => Ok(Some(value)),
             Err(err) => Err(err),
         }
