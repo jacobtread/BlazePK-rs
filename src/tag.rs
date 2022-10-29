@@ -108,7 +108,7 @@ impl Tag {
     ) -> CodecResult<()> {
         let tag = Tag::decode(reader)?;
         out.push_str(&"  ".repeat(indent));
-        out.push_str(&format!("\"{} ({:?})\": ", &tag.0, &tag.1));
+        out.push_str(&format!("\"{}\": ", &tag.0));
         return match Self::create_string_type(reader, out, indent, &tag.1) {
             Ok(_) => {
                 out.push_str(",\n");
@@ -197,7 +197,7 @@ impl Tag {
                 let value_type = ValueType::decode(reader)?;
                 let length = usize::decode(reader)?;
                 out.push_str(&format!("Map<{:?}, {:?}>", key_type, value_type));
-                out.push('{');
+                out.push_str("{\n");
 
                 for _ in 0..length {
                     out.push_str(&"  ".repeat(indent + 1));
