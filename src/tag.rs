@@ -237,11 +237,11 @@ impl Tag {
             }
             ValueType::Pair => {
                 let pair = <(usize, usize)>::decode(reader)?;
-                out.push_str(&format!("({},{})", &pair.0, &pair.1));
+                out.push_str(&format!("({}, {})", &pair.0, &pair.1));
             }
             ValueType::Triple => {
                 let value = <(usize, usize, usize)>::decode(reader)?;
-                out.push_str(&format!("({},{}, {})", &value.0, &value.1, &value.2));
+                out.push_str(&format!("({}, {}, {})", &value.0, &value.1, &value.2));
             }
             ValueType::Float => {
                 let value = f32::decode(reader)?;
