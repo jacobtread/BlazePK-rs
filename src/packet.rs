@@ -199,6 +199,12 @@ impl Packets {
         OpaquePacket(header, contents.encode_bytes())
     }
 
+    pub fn response_raw(packet: &OpaquePacket, contents: Vec<u8>) -> OpaquePacket {
+        let mut header = packet.0.clone();
+        header.ty = PacketType::Response;
+        OpaquePacket(header, contents)
+    }
+
     /// Shortcut function for creating a response packet with no content
     #[inline]
     pub fn response_empty(packet: &OpaquePacket) -> OpaquePacket {
@@ -244,6 +250,23 @@ impl Packets {
             contents.encode_bytes(),
         )
     }
+
+    pub fn notify_raw<T: PacketComponents>(component: T, contents: Vec<u8>) -> OpaquePacket {
+        let (component, command) = component.values();
+        OpaquePacket(
+            PacketHeader {
+                component,
+                command,
+                error: 0,
+                ty: PacketType::Notify,
+                id: 0,
+            },
+            contents,
+        )
+    }
+
+
+
     /// Shortcut function for creating a notify packet with no content
     #[inline]
     pub fn notify_empty<T: PacketComponents>(component: T) -> OpaquePacket {

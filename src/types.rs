@@ -258,7 +258,7 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
 
     /// Inserts multiple entries from an iterable value
     /// (i.e. Vec / slice of key value tuples)
-    pub fn insert_multiple(&mut self, entries: impl IntoIterator<Item = (K, V)>) {
+    pub fn insert_multiple(&mut self, entries: impl IntoIterator<Item=(K, V)>) {
         for (key, value) in entries {
             self.keys.push(key);
             self.values.push(value);
@@ -268,9 +268,9 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
     /// Returns the index of the provided key or None if
     /// the key was not present
     fn index_of_key<Q: ?Sized>(&self, key: &Q) -> Option<usize>
-    where
-        K: Borrow<Q>,
-        Q: Eq,
+        where
+            K: Borrow<Q>,
+            Q: Eq,
     {
         for i in 0..self.keys.len() {
             let key_at = self.keys[i].borrow();
@@ -294,9 +294,9 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
     /// its present or None.
     #[inline]
     pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
-    where
-        K: Borrow<Q>,
-        Q: Eq,
+        where
+            K: Borrow<Q>,
+            Q: Eq,
     {
         let index = self.index_of_key(key)?;
         let value = self.values.get(index)?;
@@ -306,9 +306,9 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
     /// Takes the value stored at the provided key out of
     /// the map taking ownership this also removes the key.
     pub fn take<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
-    where
-        K: Borrow<Q>,
-        Q: Eq,
+        where
+            K: Borrow<Q>,
+            Q: Eq,
     {
         let index = self.index_of_key(key)?;
         let value = self.values.remove(index);
@@ -672,10 +672,40 @@ pub fn tag_group_start(output: &mut Vec<u8>, tag: &str) {
 }
 
 #[inline]
+pub fn tag_start(output: &mut Vec<u8>, tag: &str, ty: ValueType) {
+    Tag::encode_from(tag, &ty, output);
+}
+
+#[inline]
+pub fn tag_value<T: Codec>(output: &mut Vec<u8>, tag: &str, value: &T) {
+    Tag::encode_from(tag, &T::value_type(), output);
+    T::encode(value, output);
+}
+
+#[inline]
 pub fn tag_list_start(output: &mut Vec<u8>, tag: &str, ty: ValueType, len: usize) {
     Tag::encode_from(tag, &ValueType::List, output);
     ty.encode(output);
     len.encode(output);
+}
+
+#[inline]
+pub fn tag_optional_start(output: &mut Vec<u8>, tag: &str, ty: u8) {
+    Tag::encode_from(tag, &ValueType::Optional, output);
+    output.push(ty);
+}
+
+#[inline]
+pub fn tag_list<T: Codec>(output: &mut Vec<u8>, tag: &str, value: Vec<T>) {
+    Tag::encode_from(tag, &ValueType::List, output);
+    value.encode(output);
+}
+
+#[inline]
+pub fn tag_list_empty(output: &mut Vec<u8>, tag: &str, ty: ValueType) {
+    Tag::encode_from(tag, &ValueType::List, output);
+    ty.encode(output);
+    output.push(0);
 }
 
 #[inline]
@@ -693,7 +723,6 @@ pub fn tag_var_int_list<T: VarInt>(output: &mut Vec<u8>, tag: &str, values: Vec<
     }
 }
 
-#[inline]
 pub fn tag_map_start(
     output: &mut Vec<u8>,
     tag: &str,
@@ -705,6 +734,21 @@ pub fn tag_map_start(
     key.encode(output);
     value.encode(output);
     len.encode(output);
+}
+
+pub fn tag_map<K: MapKey, V: Codec>(
+    output: &mut Vec<u8>,
+    tag: &str,
+    value: &HashMap<K, V>,
+) {
+    Tag::encode_from(tag, &ValueType::Map, output);
+    K::value_type().encode(output);
+    V::value_type().encode(output);
+    value.len().encode(output);
+    for (key, value) in value {
+        key.encode(output);
+        value.encode(output);
+    }
 }
 
 #[inline]
