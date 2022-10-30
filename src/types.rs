@@ -213,6 +213,20 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
         Self { keys, values }
     }
 
+    pub fn pop_front(&mut self) -> Option<(K, V)> {
+        let key = self.keys.pop()?;
+        let value = self.values.pop()?;
+        Some((key, value))
+    }
+
+    pub fn extend(&mut self, mut other: TdfMap<K, V>) {
+        while let Some((key, value)) = other.pop_front() {
+            if !self.keys.contains(&key) {
+                self.insert(key, value);
+            }
+        }
+    }
+
     /// Creates a new empty TdfMap
     pub fn new() -> TdfMap<K, V> {
         Self {
@@ -258,7 +272,7 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
 
     /// Inserts multiple entries from an iterable value
     /// (i.e. Vec / slice of key value tuples)
-    pub fn insert_multiple(&mut self, entries: impl IntoIterator<Item=(K, V)>) {
+    pub fn insert_multiple(&mut self, entries: impl IntoIterator<Item = (K, V)>) {
         for (key, value) in entries {
             self.keys.push(key);
             self.values.push(value);
@@ -268,9 +282,9 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
     /// Returns the index of the provided key or None if
     /// the key was not present
     fn index_of_key<Q: ?Sized>(&self, key: &Q) -> Option<usize>
-        where
-            K: Borrow<Q>,
-            Q: Eq,
+    where
+        K: Borrow<Q>,
+        Q: Eq,
     {
         for i in 0..self.keys.len() {
             let key_at = self.keys[i].borrow();
@@ -294,9 +308,9 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
     /// its present or None.
     #[inline]
     pub fn get<Q: ?Sized>(&self, key: &Q) -> Option<&V>
-        where
-            K: Borrow<Q>,
-            Q: Eq,
+    where
+        K: Borrow<Q>,
+        Q: Eq,
     {
         let index = self.index_of_key(key)?;
         let value = self.values.get(index)?;
@@ -306,9 +320,9 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
     /// Takes the value stored at the provided key out of
     /// the map taking ownership this also removes the key.
     pub fn take<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
-        where
-            K: Borrow<Q>,
-            Q: Eq,
+    where
+        K: Borrow<Q>,
+        Q: Eq,
     {
         let index = self.index_of_key(key)?;
         let value = self.values.remove(index);
@@ -736,11 +750,13 @@ pub fn tag_map_start(
     len.encode(output);
 }
 
-pub fn tag_map<K: MapKey, V: Codec>(
-    output: &mut Vec<u8>,
-    tag: &str,
-    value: &HashMap<K, V>,
-) {
+#[inline]
+pub fn map_value(output: &mut Vec<u8>, key: impl MapKey, value: impl Codec) {
+    key.encode(output);
+    value.encode(output);
+}
+
+pub fn tag_map<K: MapKey, V: Codec>(output: &mut Vec<u8>, tag: &str, value: &HashMap<K, V>) {
     Tag::encode_from(tag, &ValueType::Map, output);
     K::value_type().encode(output);
     V::value_type().encode(output);
@@ -795,6 +811,10 @@ impl Codec for &'_ str {
         Err(CodecError::InvalidAction(
             "Attempted to decode string with static lifetime",
         ))
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::String
     }
 }
 
