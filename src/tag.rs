@@ -170,7 +170,7 @@ impl Tag {
                     _ => false,
                 };
 
-                out.push_str(&format!("List<{:?}>", value_type));
+                out.push_str(&format!("List<{:?}> ", value_type));
                 out.push('[');
                 if nl {
                     out.push('\n')
@@ -196,7 +196,7 @@ impl Tag {
                 let key_type = ValueType::decode(reader)?;
                 let value_type = ValueType::decode(reader)?;
                 let length = usize::decode(reader)?;
-                out.push_str(&format!("Map<{:?}, {:?}>", key_type, value_type));
+                out.push_str(&format!("Map<{:?}, {:?}> ", key_type, value_type));
                 out.push_str("{\n");
 
                 for _ in 0..length {
