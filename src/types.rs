@@ -186,6 +186,26 @@ impl<K: MapKey, V: Codec> Codec for TdfMap<K, V> {
     }
 }
 
+impl<K: MapKey + PartialOrd, V: Codec> TdfMap<K, V> {
+    /// Orders this map based on its keys by ordering keys that
+    /// are greater further up in the map
+    pub fn order(&mut self) {
+        let keys = &mut self.keys;
+        let values = &mut self.values;
+        let mut did_run = true;
+        while did_run {
+            did_run = false;
+            for i in 0..(keys.len() - 1) {
+                if keys[i] > keys[i + 1] {
+                    keys.swap(i, i + 1);
+                    values.swap(i, i + 1);
+                    did_run = true
+                }
+            }
+        }
+    }
+}
+
 /// Implementation for converting a HashMap to a TdfMap by taking
 /// all its keys and values and building lists for the TdfMap
 impl<K: MapKey, V: Codec> From<HashMap<K, V>> for TdfMap<K, V> {
@@ -980,6 +1000,22 @@ impl<A: VarInt, B: VarInt, C: VarInt> Codec for (A, B, C) {
 mod test {
     use crate::types::TdfMap;
     use crate::{Codec, Reader};
+
+    #[test]
+    fn test_map_ord() {
+        let mut map = TdfMap::<String, String>::new();
+
+        map.insert("key1", "ABC");
+        map.insert("key2", "ABC");
+        map.insert("key4", "ABC");
+        map.insert("key24", "ABC");
+        map.insert("key11", "ABC");
+        map.insert("key17", "ABC");
+
+        map.order();
+
+        println!("{map:?}")
+    }
 
     #[test]
     fn test() {
