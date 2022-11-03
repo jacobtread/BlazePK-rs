@@ -2,7 +2,6 @@ use crate::codec::{decode_u16_be, encode_u16_be, Codec, CodecError, CodecResult,
 use std::fmt::Debug;
 use std::io;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicU16, Ordering};
 
 use crate::Tag;
 #[cfg(feature = "async")]
@@ -100,6 +99,12 @@ pub struct PacketHeader {
 }
 
 impl PacketHeader {
+    /// Checks if the component and command of this packet header matches
+    /// that of the other packet header
+    pub fn path_matches(&self, other: &PacketHeader) -> bool {
+        self.component.eq(&other.component) && self.command.eq(&other.command)
+    }
+
     /// Encodes a packet header with the provided length value
     pub fn encode_bytes(&self, length: usize) -> Vec<u8> {
         let mut header = Vec::with_capacity(12);
@@ -265,8 +270,6 @@ impl Packets {
         )
     }
 
-
-
     /// Shortcut function for creating a notify packet with no content
     #[inline]
     pub fn notify_empty<T: PacketComponents>(component: T) -> OpaquePacket {
@@ -283,8 +286,8 @@ impl Packets {
 
     /// Creates a new request packet retrieving its ID from the provided
     /// request counter.
-    pub fn request<R: RequestCounter, C: Codec, T: PacketComponents>(
-        counter: &mut R,
+    pub fn request<C: Codec, T: PacketComponents>(
+        id: u16,
         component: T,
         contents: &C,
     ) -> OpaquePacket {
@@ -295,7 +298,7 @@ impl Packets {
                 command,
                 error: 0,
                 ty: PacketType::Request,
-                id: counter.next(),
+                id,
             },
             contents.encode_bytes(),
         )
@@ -303,10 +306,7 @@ impl Packets {
 
     /// Creates a new request packet retrieving its ID from the provided
     /// request counter.
-    pub fn request_empty<R: RequestCounter, T: PacketComponents>(
-        counter: &mut R,
-        component: T,
-    ) -> OpaquePacket {
+    pub fn request_empty<T: PacketComponents>(id: u16, component: T) -> OpaquePacket {
         let (component, command) = component.values();
         OpaquePacket(
             PacketHeader {
@@ -314,7 +314,7 @@ impl Packets {
                 command,
                 error: 0,
                 ty: PacketType::Request,
-                id: counter.next(),
+                id,
             },
             Vec::with_capacity(0),
         )
@@ -541,53 +541,6 @@ impl OpaquePacket {
         output.write_all(&header).await?;
         output.write_all(content).await?;
         Ok(())
-    }
-}
-
-/// Structure for counting requests to generate the packet
-/// ID's for requests
-pub trait RequestCounter {
-    /// Called to obtain the next packet ID
-    fn next(&mut self) -> u16;
-}
-
-/// Simple counter which is just backed by a u16
-/// value that is incremented on each request
-pub struct SimpleCounter {
-    value: u16,
-}
-
-impl SimpleCounter {
-    /// Creates a new simple counter
-    pub fn new() -> SimpleCounter {
-        SimpleCounter { value: 0 }
-    }
-}
-
-impl RequestCounter for SimpleCounter {
-    fn next(&mut self) -> u16 {
-        self.value += 1;
-        self.value
-    }
-}
-
-/// Atomic backed counter implementation
-pub struct AtomicCounter {
-    value: AtomicU16,
-}
-
-impl AtomicCounter {
-    /// Creates a new atomic counter
-    pub fn new() -> AtomicCounter {
-        AtomicCounter {
-            value: AtomicU16::new(0),
-        }
-    }
-}
-
-impl RequestCounter for AtomicCounter {
-    fn next(&mut self) -> u16 {
-        self.value.fetch_add(1, Ordering::AcqRel)
     }
 }
 
