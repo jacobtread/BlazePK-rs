@@ -35,13 +35,13 @@ impl<T: Codec> Codec for TaggedValue<T> {
 }
 
 impl Tag {
-    pub fn expect<T: Codec>(reader: &mut Reader, tag: &'static str) -> CodecResult<T> {
+    pub fn expect<T: Codec>(reader: &mut Reader, tag: &str) -> CodecResult<T> {
         let expected_type = T::value_type();
         loop {
             let decoded = match Self::decode(reader) {
                 Ok(tag) => tag,
                 Err(CodecError::NotEnoughBytes(_, _, _)) => {
-                    return Err(CodecError::MissingField(tag))
+                    return Err(CodecError::MissingField(tag.to_string()))
                 }
                 Err(err) => return Err(err),
             };
@@ -52,7 +52,7 @@ impl Tag {
 
             if decoded.1.ne(&expected_type) {
                 return Err(CodecError::UnexpectedFieldType(
-                    tag,
+                    tag.to_string(),
                     expected_type.clone(),
                     decoded.1.clone(),
                 ));
@@ -62,7 +62,7 @@ impl Tag {
         }
     }
 
-    pub fn try_expect<T: Codec>(reader: &mut Reader, tag: &'static str) -> CodecResult<Option<T>> {
+    pub fn try_expect<T: Codec>(reader: &mut Reader, tag: &str) -> CodecResult<Option<T>> {
         reader.mark();
         match Self::expect(reader, tag) {
             Err(CodecError::MissingField(_)) => {

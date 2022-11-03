@@ -81,10 +81,10 @@ impl<'a> Reader<'a> {
 
 /// Errors for when decoding packet structures
 pub enum CodecError {
-    MissingField(&'static str),
+    MissingField(String),
     DecodeFail(&'static str, Box<CodecError>),
     UnexpectedType(ValueType, ValueType),
-    UnexpectedFieldType(&'static str, ValueType, ValueType),
+    UnexpectedFieldType(String, ValueType, ValueType),
     NotEnoughBytes(usize, usize, usize),
     UnknownError,
     DecodedTwice,
