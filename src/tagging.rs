@@ -5,6 +5,12 @@ use crate::{encode_str, Codec, MapKey, Tag, ValueType, VarInt, EMPTY_OPTIONAL};
 // Writing Tags
 
 #[inline]
+pub fn tag_bool(output: &mut Vec<u8>, tag: &str, value: bool) {
+    Tag::encode_from(tag, &ValueType::VarInt, output);
+    value.encode(output);
+}
+
+#[inline]
 pub fn tag_zero(output: &mut Vec<u8>, tag: &str) {
     Tag::encode_from(tag, &ValueType::VarInt, output);
     output.push(0);
