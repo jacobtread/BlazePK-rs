@@ -366,13 +366,29 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
 
     /// Returns the key value pair stored at the
     /// provided index if one exists
-    fn at_index(&self, index: usize) -> Option<(&K, &V)> {
+    pub fn at_index(&self, index: usize) -> Option<(&K, &V)> {
         let key = self.keys.get(index)?;
         let value = self.values.get(index)?;
         Some((key, value))
     }
+
+    pub fn iter<'a>(&'a self) -> TdfMapIter<'a, K, V> {
+        TdfMapIter {
+            map: self,
+            index: 0,
+        }
+    }
 }
 
+impl<K: MapKey, V: Codec> Iterator for TdfMap<K, V> {
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let key = self.keys.pop()?;
+        let value = self.values.pop()?;
+        Some((key, value))
+    }
+}
 /// Iterator implementation for the TdfMap
 /// for iterating over the entries in the
 /// Map
