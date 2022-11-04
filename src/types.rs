@@ -338,7 +338,7 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
 
     /// Takes the value stored at the provided key out of
     /// the map taking ownership this also removes the key.
-    pub fn take<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
+    pub fn get_owned<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Eq,
