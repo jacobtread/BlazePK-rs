@@ -181,7 +181,7 @@ impl Tag {
                         out.push_str(&"  ".repeat(indent + 1));
                     }
                     Self::create_string_type(reader, out, indent + 1, &value_type)?;
-
+                    out.push_str(", ");
                     if nl {
                         out.push('\n')
                     }
