@@ -155,8 +155,9 @@ impl Tag {
                         break;
                     }
                     if next_byte != 2 {
-                        is_two = true;
                         reader.step_back();
+                    } else {
+                        is_two = true;
                     }
                     Self::create_string_tag(reader, out, indent + 1)?;
                 }
