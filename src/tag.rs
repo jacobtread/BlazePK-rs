@@ -148,18 +148,23 @@ impl Tag {
             }
             ValueType::Group => {
                 out.push_str("Group {\n");
+                let mut is_two = false;
                 loop {
                     let next_byte = reader.take_one()?;
                     if next_byte == 0 {
                         break;
                     }
                     if next_byte != 2 {
+                        is_two = true;
                         reader.step_back();
                     }
                     Self::create_string_tag(reader, out, indent + 1)?;
                 }
                 out.push_str(&"  ".repeat(indent));
                 out.push_str("}");
+                if is_two {
+                    println!(" (2)")
+                }
             }
             ValueType::List => {
                 let value_type = ValueType::decode(reader)?;
