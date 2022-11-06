@@ -163,7 +163,7 @@ impl Tag {
                 out.push_str(&"  ".repeat(indent));
                 out.push_str("}");
                 if is_two {
-                    println!(" (2)")
+                    out.push_str(" (2)");
                 }
             }
             ValueType::List => {
