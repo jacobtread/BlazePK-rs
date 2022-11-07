@@ -443,7 +443,7 @@ impl OpaquePacket {
     }
 
     /// Debug decoding decodes self printing all the hit nodes
-    pub fn debug_decode(&self) -> CodecResult<()> {
+    pub fn debug_decode(&self) -> CodecResult<String> {
         let mut reader = Reader::new(&self.1);
         let mut out = String::new();
         out.push_str(&format!(
@@ -452,8 +452,7 @@ impl OpaquePacket {
         ));
         Tag::stringify(&mut reader, &mut out, 1)?;
         out.push('}');
-        println!("{}", out);
-        Ok(())
+        Ok(out)
     }
 
     /// Reads a packet from the provided input without parsing
