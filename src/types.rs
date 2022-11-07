@@ -240,7 +240,10 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
 
     pub fn extend(&mut self, mut other: TdfMap<K, V>) {
         while let Some((key, value)) = other.pop_front() {
-            if !self.keys.contains(&key) {
+            let key_index = self.keys.iter().position(|value| key.eq(value));
+            if let Some(index) = key_index {
+                self.values[index] = value;
+            } else {
                 self.insert(key, value);
             }
         }
@@ -863,6 +866,28 @@ mod test {
         map.order();
 
         println!("{map:?}")
+    }
+
+    #[test]
+    fn test_map_extend() {
+        let mut mapa = TdfMap::<String, String>::new();
+
+        mapa.insert("key1", "ABC");
+        mapa.insert("key2", "ABC");
+        mapa.insert("key4", "ABC");
+        mapa.insert("key24", "ABC");
+        mapa.insert("key11", "ABC");
+        mapa.insert("key17", "ABC");
+
+        let mut mapb = TdfMap::<String, String>::new();
+
+        mapb.insert("key1", "DDD");
+        mapb.insert("key2", "ABC");
+        mapb.insert("key4", "DDD");
+        mapb.insert("abc", "ABC");
+
+        mapa.extend(mapb);
+        println!("{mapa:?}")
     }
 
     #[test]
