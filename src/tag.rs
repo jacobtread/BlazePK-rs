@@ -225,7 +225,7 @@ impl Tag {
                 if ty != EMPTY_OPTIONAL {
                     out.push_str("Optional(");
                     let tag = Tag::decode(reader)?;
-                    out.push_str(&format!("\"{} ({:?})\": ", &tag.0, &tag.1));
+                    out.push_str(&format!("\"{}\", {:?}: ", &tag.0, ty));
                     Self::create_string_type(reader, out, indent + 1, &tag.1)?;
                     out.push_str(&"  ".repeat(indent));
                     out.push_str(")")
