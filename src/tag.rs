@@ -147,7 +147,7 @@ impl Tag {
                 out.push(']');
             }
             ValueType::Group => {
-                out.push_str("Group {\n");
+                out.push_str("{\n");
                 let mut is_two = false;
                 loop {
                     let next_byte = reader.take_one()?;
@@ -182,12 +182,16 @@ impl Tag {
                     out.push('\n')
                 }
 
-                for _ in 0..length {
+                for i in 0..length {
                     if nl {
                         out.push_str(&"  ".repeat(indent + 1));
                     }
                     Self::create_string_type(reader, out, indent + 1, &value_type)?;
-                    out.push_str(", ");
+
+                    if i < length - 1 {
+                        out.push_str(", ");
+                    }
+
                     if nl {
                         out.push('\n')
                     }
@@ -227,17 +231,21 @@ impl Tag {
                     let tag = Tag::decode(reader)?;
                     out.push_str(&format!("\"{}\", {:?}: ", &tag.0, ty));
                     Self::create_string_type(reader, out, indent + 1, &tag.1)?;
-                    out.push_str(&"  ".repeat(indent));
                     out.push_str(")")
                 } else {
                     out.push_str("Optional(Empty)");
                 }
             }
             ValueType::VarIntList => {
-                let value = VarIntList::<usize>::decode(reader)?;
+                let value = VarIntList::<usize>::decode(reader)?.0;
                 out.push_str("VarList[");
-                for b in value.0 {
+                let length = value.len();
+                for i in 0..length {
+                    let b = value[i];
                     out.push_str(&format!("0x{:X}", b));
+                    if i < length - 1 {
+                        out.push_str(", ");
+                    }
                 }
                 out.push(']');
             }
