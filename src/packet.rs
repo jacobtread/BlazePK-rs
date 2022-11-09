@@ -105,21 +105,27 @@ impl PacketHeader {
         self.component.eq(&other.component) && self.command.eq(&other.command)
     }
 
+    /// Encodes the header writing its bytes to the provided output
+    /// Vec
+    pub fn write_bytes(&self, length: usize, output: &mut Vec<u8>) {
+        let is_extended = length > 0xFFFF;
+        encode_u16_be(&(length as u16), output);
+        encode_u16_be(&self.component, output);
+        encode_u16_be(&self.command, output);
+        encode_u16_be(&self.error, output);
+        output.push((self.ty.value() >> 8) as u8);
+        output.push(if is_extended { 0x10 } else { 0x00 });
+        encode_u16_be(&self.id, output);
+        if is_extended {
+            output.push(((length & 0xFF000000) >> 24) as u8);
+            output.push(((length & 0x00FF0000) >> 16) as u8);
+        }
+    }
+
     /// Encodes a packet header with the provided length value
     pub fn encode_bytes(&self, length: usize) -> Vec<u8> {
         let mut header = Vec::with_capacity(12);
-        let is_extended = length > 0xFFFF;
-        encode_u16_be(&(length as u16), &mut header);
-        encode_u16_be(&self.component, &mut header);
-        encode_u16_be(&self.command, &mut header);
-        encode_u16_be(&self.error, &mut header);
-        header.push((self.ty.value() >> 8) as u8);
-        header.push(if is_extended { 0x10 } else { 0x00 });
-        encode_u16_be(&self.id, &mut header);
-        if is_extended {
-            header.push(((length & 0xFF000000) >> 24) as u8);
-            header.push(((length & 0x00FF0000) >> 16) as u8);
-        }
+        self.write_bytes(length, &mut header);
         header
     }
 
@@ -475,8 +481,8 @@ impl OpaquePacket {
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents)?;
         let component = T::from_values(
-            *&header.component,
-            *&header.command,
+            header.component,
+            header.command,
             matches!(&header.ty, PacketType::Notify),
         );
         Ok((component, Self(header, contents)))
@@ -540,6 +546,24 @@ impl OpaquePacket {
         output.write_all(&header).await?;
         output.write_all(content).await?;
         Ok(())
+    }
+
+    /// Appends the header and contents of this packet to the provided output
+    /// Vec of bytes.
+    pub fn write_bytes(&self, output: &mut Vec<u8>) {
+        let content = &self.1;
+        let length = content.len();
+        self.0.write_bytes(length, output);
+        output.extend_from_slice(content);
+    }
+
+    /// Encodes this packet header and contents into a Vec. Vec may be
+    /// over allocated by 2 bytes to prevent reallocation for longer
+    /// packets.
+    pub fn encode_bytes(&self) -> Vec<u8> {
+        let mut output = Vec::with_capacity(14 + self.1.len());
+        self.write_bytes(&mut output);
+        output
     }
 }
 
