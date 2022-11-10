@@ -191,10 +191,15 @@ impl<K: MapKey + PartialOrd, V: Codec> TdfMap<K, V> {
     pub fn order(&mut self) {
         let keys = &mut self.keys;
         let values = &mut self.values;
+        let length = keys.len();
+        // If empty or 1 item no need to order
+        if length <= 1 {
+            return;
+        }
         let mut did_run = true;
         while did_run {
             did_run = false;
-            for i in 0..(keys.len() - 1) {
+            for i in 0..(length - 1) {
                 if keys[i] > keys[i + 1] {
                     keys.swap(i, i + 1);
                     values.swap(i, i + 1);
