@@ -47,7 +47,7 @@ pub trait PacketComponents: Debug + Eq + PartialEq {
 }
 
 /// The different types of packets
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PacketType {
     /// ID counted request packets
     Request,
@@ -87,7 +87,7 @@ impl PacketType {
 
 /// Structure of packet header which comes before the
 /// packet content and describes it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct PacketHeader {
     /// The component of this packet
     pub component: u16,
@@ -472,7 +472,7 @@ impl<C: Codec> TryInto<Packet<C>> for OpaquePacket {
 
 /// Structure for packets that have been read where the contents
 /// are not know and are encoded as a vector of bytes.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OpaquePacket(pub PacketHeader, pub Vec<u8>);
 
 impl OpaquePacket {
