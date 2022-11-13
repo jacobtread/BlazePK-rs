@@ -19,7 +19,7 @@ tokio = { version = "1", features = ["full"], optional = true }
 blaze-ssl-async = { version = "0.1.1", optional = true }
 
 [features]
-default = ["sync", "async", "blaze-ssl"]
+default = ["sync"]
 # Syncronous reading / writing functions
 sync = []
 # Async reading / writing functions
