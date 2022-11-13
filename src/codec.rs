@@ -90,7 +90,6 @@ pub enum CodecError {
     UnexpectedFieldType(String, ValueType, ValueType),
     NotEnoughBytes(usize, usize, usize),
     UnknownError,
-    DecodedTwice,
     InvalidAction(&'static str),
     Other(&'static str),
 }
@@ -126,7 +125,6 @@ impl Debug for CodecError {
             CodecError::UnknownError => {
                 f.write_str("Unknown error occurred when trying to fit bytes")
             }
-            CodecError::DecodedTwice => f.write_str("Attempted to decode packet contents twice"),
             CodecError::InvalidAction(value) => {
                 write!(f, "Attempt invalid action: {value}")
             }
