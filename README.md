@@ -10,6 +10,12 @@ Mass Effect 3, Battlefield 3, another Other EA games.
 This is created for use with the Rust re-write of the [PocketRelay (https://github.com/jacobtread/PocketRelay)](https://github.com/jacobtread/PocketRelay) 
 software.
 
+## Crate Features
+- default *Default features uses async*
+- sync *Provides functions for syncronously writing and reading packets*
+- async *Provides functions for asyncronously writing and reading packets through tokio*
+- blaze-ssl *Provides functions for asyncronously writing and reading packets through Blaze-SSL streams*
+
 ## Working with structs
 
 ### Creating decodable structs
