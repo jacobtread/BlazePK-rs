@@ -1,6 +1,5 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
-use crate::types::{VarIntList, EMPTY_OPTIONAL};
-use crate::Blob;
+use crate::types::{Blob, VarIntList, EMPTY_OPTIONAL};
 use std::fmt::Debug;
 
 /// Tag for a Tdf value. This contains the String tag for naming

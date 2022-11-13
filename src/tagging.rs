@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use crate::{encode_str, Codec, MapKey, Tag, ValueType, VarInt, EMPTY_OPTIONAL};
+use crate::{
+    codec::Codec,
+    tag::{Tag, ValueType},
+    types::{encode_str, MapKey, VarInt, EMPTY_OPTIONAL},
+};
 
 // Writing Tags
 

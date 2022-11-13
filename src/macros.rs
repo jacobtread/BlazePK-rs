@@ -38,13 +38,13 @@ macro_rules! packet {
         }
 
         /// Trait fitting implementations
-        impl $crate::Codec for $name {
+        impl $crate::codec::Codec for $name {
 
             fn encode(&self, output: &mut Vec<u8>) {
                 $($crate::encode_field!(output, $tag, &self.$field, $ty);)*
             }
 
-            fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self>  {
+            fn decode(reader: &mut $crate::codec::Reader) -> $crate::codec::CodecResult<Self>  {
                 $($crate::decode_field!(reader, $tag, $field, $ty);)*
                 Ok(Self {
                     $($field),*
@@ -54,42 +54,12 @@ macro_rules! packet {
     };
 }
 
-#[macro_export]
-macro_rules! tag_group {
-    ($output:ident, $tag:literal, $content:block) => {
-        $crate::tag_group_start($output, $tag);
-
-        {
-            $content
-        }
-
-        $crate::tag_group_end($output);
-    };
-}
-
 /// Macro for generating encoding for a field with with a tag and field
 #[macro_export]
 macro_rules! encode_field {
     ($output:ident, $tag:ident, $field:expr, $ty:ty) => {
-        $crate::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), $output);
+        $crate::tag::Tag::encode_from(stringify!($tag), &(<$ty>::value_type()), $output);
         <$ty>::encode($field, $output);
-    };
-}
-
-#[macro_export]
-macro_rules! encode_zero {
-    ($output:ident, $tag:ident) => {
-        $crate::Tag::encode_from(stringify!($tag), &$crate::ValueType::VarInt, $output);
-        $output.push(0);
-    };
-}
-
-#[macro_export]
-macro_rules! encode_empty_str {
-    ($output:ident, $tag:ident) => {
-        $crate::Tag::encode_from(stringify!($tag), &$crate::ValueType::String, $output);
-        $output.push(1);
-        $output.push(0);
     };
 }
 
@@ -97,8 +67,9 @@ macro_rules! encode_empty_str {
 #[macro_export]
 macro_rules! decode_field {
     ($reader:ident, $tag:ident, $field:ident, $ty:ty) => {
-        let $field = $crate::Tag::expect::<$ty>($reader, stringify!($tag))
-            .map_err(|err| $crate::CodecError::DecodeFail(stringify!($field), Box::new(err)))?;
+        let $field = $crate::tag::Tag::expect::<$ty>($reader, stringify!($tag)).map_err(|err| {
+            $crate::codec::CodecError::DecodeFail(stringify!($field), Box::new(err))
+        })?;
     };
 }
 
@@ -120,24 +91,24 @@ macro_rules! group {
             $(pub $field: $ty),*
         }
 
-        impl $crate::Codec for $name {
+        impl $crate::codec::Codec for $name {
 
             fn encode(&self, output: &mut Vec<u8>) {
                 $($crate::encode_field!(output, $tag, &self.$field, $ty);)*
                 output.push(0)
             }
 
-            fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
-                $crate::Tag::take_two(reader)?;
+            fn decode(reader: &mut $crate::codec::Reader) -> $crate::codec::CodecResult<Self> {
+                $crate::tag::Tag::take_two(reader)?;
                 $($crate::decode_field!(reader, $tag, $field, $ty);)*
-                $crate::Tag::discard_group(reader)?;
+                $crate::tag::Tag::discard_group(reader)?;
                 Ok(Self {
                     $($field),*
                 })
             }
 
-            fn value_type() -> $crate::ValueType {
-                $crate::ValueType::Group
+            fn value_type() -> $crate::tag::ValueType {
+                $crate::tag::ValueType::Group
             }
         }
     };
@@ -154,7 +125,7 @@ macro_rules! group {
             $(pub $field: $ty),*
         }
 
-        impl $crate::Codec for $name {
+        impl $crate::codec::Codec for $name {
 
             fn encode(&self, output: &mut Vec<u8>) {
                 output.push(2);
@@ -162,17 +133,17 @@ macro_rules! group {
                 output.push(0);
             }
 
-            fn decode(reader: &mut $crate::Reader) -> $crate::CodecResult<Self> {
-                $crate::Tag::take_two(reader)?;
+            fn decode(reader: &mut $crate::Reader) -> $crate::codec::CodecResult<Self> {
+                $crate::tag::Tag::take_two(reader)?;
                 $($crate::decode_field!(reader, $tag, $field, $ty);)*
-                $crate::Tag::discard_group(reader)?;
+                $crate::tag::Tag::discard_group(reader)?;
                 Ok(Self {
                     $($field),*
                 })
             }
 
             fn value_type() -> $crate::ValueType {
-                $crate::ValueType::Group
+                $crate::tag::ValueType::Group
             }
         }
     };
@@ -223,11 +194,11 @@ macro_rules! define_components {
             Unknown(u16, u16)
         }
 
-        impl $crate::PacketComponents for Components {
+        impl $crate::packet::PacketComponents for Components {
 
 
             fn values(&self)-> (u16, u16) {
-                use $crate::PacketComponent;
+                use $crate::packet::PacketComponent;
                 match self {
                     $(
                         Self::$component(command) => ($component_value, command.command()),
@@ -237,7 +208,7 @@ macro_rules! define_components {
             }
 
             fn from_values(component: u16, command: u16, notify: bool) -> Self {
-                use $crate::PacketComponent;
+                use $crate::packet::PacketComponent;
                 match component {
                     $($component_value => Self::$component($component::from_value(command, notify)),)*
                     _ => Self::Unknown(component, command),
@@ -253,7 +224,7 @@ macro_rules! define_components {
                 Unknown(u16)
             }
 
-            impl $crate::PacketComponent for $component {
+            impl $crate::packet::PacketComponent for $component {
                 fn command(&self) -> u16 {
                     match self {
                         $(Self::$command => $command_value,)*
@@ -284,8 +255,8 @@ macro_rules! define_components {
 
 #[cfg(test)]
 mod test {
-    use crate::{Codec, Reader};
-    use crate::{TdfMap, TdfOptional, VarIntList};
+    use crate::codec::{Codec, Reader};
+    use crate::types::{TdfMap, TdfOptional, VarIntList};
 
     define_components! {
         Authentication (0x1) {

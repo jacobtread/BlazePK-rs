@@ -854,8 +854,8 @@ impl<A: VarInt, B: VarInt, C: VarInt> Codec for (A, B, C) {
 
 #[cfg(test)]
 mod test {
+    use crate::codec::{Codec, Reader};
     use crate::types::TdfMap;
-    use crate::{Codec, Reader};
 
     #[test]
     fn test_map_ord() {
