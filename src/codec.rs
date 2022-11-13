@@ -1,5 +1,8 @@
 use crate::tag::ValueType;
-use std::fmt::{Debug, Formatter};
+use std::{
+    fmt::{Debug, Formatter},
+    io,
+};
 
 /// Structure for reading over a vec
 /// of bytes using a cursor.
@@ -174,10 +177,13 @@ pub trait Codec: Sized {
 }
 
 /// Attempts to decode a u16 value from the provided slice
-pub fn decode_u16_be(value: &[u8]) -> CodecResult<u16> {
-    Ok(u16::from_be_bytes(
-        value.try_into().map_err(|_| CodecError::UnknownError)?,
-    ))
+pub fn decode_u16_be(value: &[u8]) -> io::Result<u16> {
+    Ok(u16::from_be_bytes(value.try_into().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Unable to fit u16 bytes into u16",
+        )
+    })?))
 }
 
 /// Encodes the provided u16 value to bytes and extends

@@ -2,7 +2,7 @@
 name = "blaze-pk"
 version = "0.4.8"
 edition = "2021"
-description = "Rust library for blaze packet system"
+description = "Rust library for Blaze packet system"
 license = "MIT"
 authors = ["Jacobtread <jacobtread@gmail.com>"]
 repository = "https://github.com/jacobtread/BlazePK-rs"
@@ -19,6 +19,10 @@ tokio = { version = "1", features = ["full"], optional = true }
 blaze-ssl-async = { version = "0.1.1", optional = true }
 
 [features]
-default = ["blaze-ssl-async"]
+default = ["sync", "async", "blaze-ssl"]
+# Syncronous reading / writing functions
+sync = []
+# Async reading / writing functions
 async = ["tokio"]
-blaze-ssl-async = ["async", "dep:blaze-ssl-async"]
+# Blaze-ssl reading / writing functions
+blaze-ssl = ["async", "dep:blaze-ssl-async"]

@@ -1,5 +1,5 @@
 /// Macro for generating structures that can be encoded and decoded from bytes
-/// (DONT USE THIS FOR GROUPS USE `tdf_group` because they require extra bytes)
+/// (DONT USE THIS FOR GROUPS USE `group` because they require extra bytes)
 ///
 /// You can only use types that implement Codec the ones implemented
 /// by this library are
@@ -11,9 +11,9 @@
 ///
 /// packet! {
 ///     struct Test {
-///         TEST: u16,
-///         ALT: String,
-///         BYT: Blob
+///         TEST test: u16,
+///         ALT alt: String,
+///         BYT byt: Vec<u8>
 ///     }
 /// }
 ///
