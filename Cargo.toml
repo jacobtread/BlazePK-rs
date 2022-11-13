@@ -1,6 +1,6 @@
 [package]
 name = "blaze-pk"
-version = "0.4.8"
+version = "0.5.0"
 edition = "2021"
 description = "Rust library for Blaze packet system"
 license = "MIT"
