@@ -202,3 +202,7 @@ fn create_packet() {
     let my_packet = Packets::notify_empty(components::Authentication::First);
 }
 ```
+
+## EA / BioWare Notice
+All code in this repository is authored by Jacobtread and none is taken from BioWare. This code has been 
+produced from studying the protocol of the official servers and emulating its functionality. This program is in no way or form supported, endorsed, or provided by BioWare or Electronic Arts.
