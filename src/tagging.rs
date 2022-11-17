@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use crate::{
     codec::Codec,
     tag::{Tag, ValueType},
-    types::{encode_str, MapKey, VarInt, EMPTY_OPTIONAL},
+    types::{encode_str, MapKey, VarInt, UNION_UNSET},
 };
 
 // Writing Tags
@@ -98,15 +98,28 @@ pub fn tag_list_start(output: &mut Vec<u8>, tag: &str, ty: ValueType, len: usize
 }
 
 #[inline]
-pub fn tag_optional_start(output: &mut Vec<u8>, tag: &str, ty: u8) {
-    Tag::encode_from(tag, &ValueType::Optional, output);
-    output.push(ty);
+pub fn tag_union_start(output: &mut Vec<u8>, tag: &str, key: u8) {
+    Tag::encode_from(tag, &ValueType::Union, output);
+    output.push(key);
+}
+
+pub fn tag_union_value<T: Codec>(
+    output: &mut Vec<u8>,
+    tag: &str,
+    key: u8,
+    value_tag: &str,
+    value: T,
+) {
+    Tag::encode_from(tag, &ValueType::Union, output);
+    output.push(key);
+    Tag::encode_from(value_tag, &T::value_type(), output);
+    value.encode(output);
 }
 
 #[inline]
-pub fn tag_optional_none(output: &mut Vec<u8>, tag: &str) {
-    Tag::encode_from(tag, &ValueType::Optional, output);
-    output.push(EMPTY_OPTIONAL);
+pub fn tag_union_unset(output: &mut Vec<u8>, tag: &str) {
+    Tag::encode_from(tag, &ValueType::Union, output);
+    output.push(UNION_UNSET);
 }
 
 #[inline]

@@ -1,5 +1,6 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
-use crate::tag::{TaggedValue, ValueType};
+
+use crate::tag::{Tag, ValueType};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -57,32 +58,79 @@ impl<T: VarInt> VarIntList<T> {
     }
 }
 
+/// Type that can be unset or contain a pair of key
+/// values
 #[derive(Debug, PartialEq, Eq)]
-pub enum TdfOptional<T: Codec> {
-    Some(u8, TaggedValue<T>),
-    None,
+pub enum Union<C: Codec> {
+    Set { key: u8, tag: String, value: C },
+    Unset,
 }
 
-impl<T: Codec> TdfOptional<T> {
-    /// Returns true if there is a value
-    pub fn is_some(&self) -> bool {
-        matches!(self, Self::Some(_, _))
+impl<T: Codec> Union<T> {
+    /// Creates a new union with a unset value
+    pub fn unset() -> Self {
+        Self::Unset
     }
 
-    /// Returns true if there is no value
-    pub fn is_none(&self) -> bool {
-        matches!(self, Self::None)
+    /// Creates a new set union value with the provided
+    /// key tag and value
+    pub fn set(key: u8, tag: &str, value: T) -> Self {
+        Self::Set {
+            key,
+            tag: tag.to_owned(),
+            value,
+        }
     }
 
-    /// Function for choosing a some value with a
-    /// default type
-    #[inline]
-    pub fn default_some(tag: &str, value: T) -> TdfOptional<T> {
-        TdfOptional::Some(0, (tag.to_string(), value))
+    /// Checks if the union is of set type
+    pub fn is_set(&self) -> bool {
+        matches!(self, Self::Set { .. })
+    }
+
+    /// Checks if the union is of unset type
+    pub fn is_unset(&self) -> bool {
+        matches!(self, Self::Unset)
     }
 }
 
-pub const EMPTY_OPTIONAL: u8 = 0x7F;
+impl<T: Codec> Codec for Union<T> {
+    fn encode(&self, output: &mut Vec<u8>) {
+        match self {
+            Union::Set { key, tag, value } => {
+                output.push(*key);
+                Tag::encode_from(tag, &T::value_type(), output);
+                value.encode(output);
+            }
+            Union::Unset => output.push(UNION_UNSET),
+        }
+    }
+
+    fn decode(reader: &mut Reader) -> CodecResult<Self> {
+        let key = reader.take_one()?;
+        if key == UNION_UNSET {
+            return Ok(Union::Unset);
+        }
+        let tag = Tag::decode(reader)?;
+        let expected_type = T::value_type();
+        let actual_type = tag.1;
+        if actual_type != expected_type {
+            return Err(CodecError::UnexpectedType(expected_type, actual_type));
+        }
+        let value = T::decode(reader)?;
+
+        Ok(Union::Set {
+            key,
+            tag: tag.0,
+            value,
+        })
+    }
+
+    fn value_type() -> ValueType {
+        ValueType::Union
+    }
+}
+
+pub const UNION_UNSET: u8 = 0x7F;
 
 pub trait VarInt: PartialEq + Eq + Debug + Codec {}
 
@@ -765,32 +813,6 @@ impl<T: Codec> Codec for Vec<T> {
 
     fn value_type() -> ValueType {
         ValueType::List
-    }
-}
-
-impl<T: Codec> Codec for TdfOptional<T> {
-    fn encode(&self, output: &mut Vec<u8>) {
-        match self {
-            TdfOptional::Some(ty, value) => {
-                output.push(*ty);
-                value.encode(output);
-            }
-            TdfOptional::None => output.push(EMPTY_OPTIONAL),
-        }
-    }
-
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let ty = reader.take_one()?;
-        Ok(if ty != 0x7F {
-            let value = TaggedValue::<T>::decode(reader)?;
-            TdfOptional::Some(ty, value)
-        } else {
-            TdfOptional::None
-        })
-    }
-
-    fn value_type() -> ValueType {
-        ValueType::Optional
     }
 }
 

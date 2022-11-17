@@ -256,7 +256,7 @@ macro_rules! define_components {
 #[cfg(test)]
 mod test {
     use crate::codec::{Codec, Reader};
-    use crate::types::{TdfMap, TdfOptional, VarIntList};
+    use crate::types::{TdfMap, Union, VarIntList};
 
     define_components! {
         Authentication (0x1) {
@@ -276,7 +276,7 @@ mod test {
             AF af: Vec<String>,
             AG ag: Vec<MyGroup>,
             AH ah: TdfMap<String, String>,
-            AI ai: TdfOptional<String>,
+            AI ai: Union<String>,
             AK ak: VarIntList<u32>,
             AL al: (u8, u8),
             AM am: (u32, u32, u32)
@@ -313,7 +313,7 @@ mod test {
                 },
             ],
             ah: map,
-            ai: TdfOptional::<String>::None,
+            ai: Union::<String>::Unset,
             ak: VarIntList(vec![1]),
             al: (5, 236),
             am: (255, 6000, 6743),

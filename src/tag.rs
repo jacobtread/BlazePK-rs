@@ -1,37 +1,11 @@
 use crate::codec::{Codec, CodecError, CodecResult, Reader};
-use crate::types::{Blob, VarIntList, EMPTY_OPTIONAL};
+use crate::types::{Blob, VarIntList, UNION_UNSET};
 use std::fmt::Debug;
 
 /// Tag for a Tdf value. This contains the String tag for naming
 /// the field and then the type of the field
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tag(pub String, pub ValueType);
-
-/// Encoding structure for Codec values tagged with a string tag
-/// these are encoded as the tag then the value
-pub type TaggedValue<T> = (String, T);
-
-impl<T: Codec> Codec for TaggedValue<T> {
-    fn encode(&self, output: &mut Vec<u8>) {
-        Tag::encode_from(&self.0, &T::value_type(), output);
-        T::encode(&self.1, output);
-    }
-
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let tag = Tag::decode(reader)?;
-
-        let expected_type = T::value_type();
-        let actual_type = tag.1;
-
-        if actual_type != expected_type {
-            return Err(CodecError::UnexpectedType(expected_type, actual_type));
-        }
-
-        let value = T::decode(reader)?;
-
-        Ok((tag.0, value))
-    }
-}
 
 impl Tag {
     pub fn expect<T: Codec>(reader: &mut Reader, tag: &str) -> CodecResult<T> {
@@ -223,9 +197,9 @@ impl Tag {
                 out.push_str(&"  ".repeat(indent));
                 out.push('}');
             }
-            ValueType::Optional => {
+            ValueType::Union => {
                 let ty = reader.take_one()?;
-                if ty != EMPTY_OPTIONAL {
+                if ty != UNION_UNSET {
                     out.push_str("Optional(");
                     let tag = Tag::decode(reader)?;
                     out.push_str(&format!("\"{}\", {:?}: ", &tag.0, ty));
@@ -294,9 +268,9 @@ impl Tag {
                     Self::discard_type(&value_ty, reader)?;
                 }
             }
-            ValueType::Optional => {
+            ValueType::Union => {
                 let ty = reader.take_one()?;
-                if ty != EMPTY_OPTIONAL {
+                if ty != UNION_UNSET {
                     Self::discard_tag(reader)?;
                 }
             }
@@ -412,7 +386,7 @@ pub enum ValueType {
     Group,
     List,
     Map,
-    Optional,
+    Union,
     VarIntList,
     Pair,
     Triple,
@@ -439,7 +413,7 @@ impl ValueType {
             ValueType::Group => 0x3,
             ValueType::List => 0x4,
             ValueType::Map => 0x5,
-            ValueType::Optional => 0x6,
+            ValueType::Union => 0x6,
             ValueType::VarIntList => 0x7,
             ValueType::Pair => 0x8,
             ValueType::Triple => 0x9,
@@ -456,7 +430,7 @@ impl ValueType {
             0x3 => ValueType::Group,
             0x4 => ValueType::List,
             0x5 => ValueType::Map,
-            0x6 => ValueType::Optional,
+            0x6 => ValueType::Union,
             0x7 => ValueType::VarIntList,
             0x8 => ValueType::Pair,
             0x9 => ValueType::Triple,
