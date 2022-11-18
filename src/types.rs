@@ -434,8 +434,16 @@ impl<K: MapKey, V: Codec> TdfMap<K, V> {
             index: 0,
         }
     }
+
+    /// Prepares for iteration by reversing the keys
+    /// and the values
+    pub fn flip_iter(&mut self) {
+        self.keys.reverse();
+        self.values.reverse();
+    }
 }
 
+/// Call `flip_iter` to iterate in the correct direction
 impl<K: MapKey, V: Codec> Iterator for TdfMap<K, V> {
     type Item = (K, V);
 
