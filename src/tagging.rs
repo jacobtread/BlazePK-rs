@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    codec::Codec,
+    codec::{Codec, CodecError, CodecResult, Reader},
     tag::{Tag, ValueType},
     types::{encode_str, MapKey, VarInt, UNION_UNSET},
 };
@@ -199,4 +199,40 @@ pub fn tag_triple<A: VarInt, B: VarInt, C: VarInt>(
 pub fn tag_pair<A: VarInt, B: VarInt>(output: &mut Vec<u8>, tag: &str, value: &(A, B)) {
     Tag::encode_from(tag, &ValueType::Pair, output);
     value.encode(output);
+}
+
+pub fn expect_list(reader: &mut Reader, tag: &str, value_type: ValueType) -> CodecResult<usize> {
+    let _ = Tag::decode_until(reader, tag, ValueType::List)?;
+    let list_type = ValueType::decode(reader)?;
+    if list_type != value_type {
+        return Err(CodecError::UnexpectedType(value_type, list_type));
+    }
+    let count = usize::decode(reader)?;
+    Ok(count)
+}
+
+pub fn expect_map(
+    reader: &mut Reader,
+    tag: &str,
+    key_type: ValueType,
+    value_type: ValueType,
+) -> CodecResult<usize> {
+    let _ = Tag::decode_until(reader, tag, ValueType::Map)?;
+    let k_type = ValueType::decode(reader)?;
+    let v_type = ValueType::decode(reader)?;
+
+    if k_type != key_type {
+        return Err(CodecError::UnexpectedType(key_type, k_type));
+    }
+
+    if v_type != value_type {
+        return Err(CodecError::UnexpectedType(value_type, v_type));
+    }
+    let count = usize::decode(reader)?;
+    Ok(count)
+}
+
+#[inline]
+pub fn expect_tag<T: Codec>(reader: &mut Reader, tag: &str) -> CodecResult<T> {
+    Tag::expect(reader, tag)
 }
