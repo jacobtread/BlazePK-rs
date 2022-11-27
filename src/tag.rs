@@ -8,8 +8,18 @@ use std::fmt::Debug;
 pub struct Tag(pub String, pub ValueType);
 
 impl Tag {
-    pub fn expect<T: Codec>(reader: &mut Reader, tag: &str) -> CodecResult<T> {
-        let expected_type = T::value_type();
+    /// Decodes tags from the reader until the tag with the provided tag name
+    /// is found. If the tag type doesn't match the `expected_type` then an
+    /// error will be returned.
+    ///
+    /// `reader`        The reader to read from
+    /// `tag`       	The tag name to read until
+    /// `expected_type` The expected type of the tag
+    pub fn decode_until(
+        reader: &mut Reader,
+        tag: &str,
+        expected_type: ValueType,
+    ) -> CodecResult<()> {
         loop {
             let decoded = match Self::decode(reader) {
                 Ok(tag) => tag,
@@ -22,7 +32,6 @@ impl Tag {
                 Self::discard_type(&decoded.1, reader)?;
                 continue;
             }
-
             if decoded.1.ne(&expected_type) {
                 return Err(CodecError::UnexpectedFieldType(
                     tag.to_string(),
@@ -30,9 +39,19 @@ impl Tag {
                     decoded.1.clone(),
                 ));
             }
-
-            return T::decode(reader);
+            return Ok(());
         }
+    }
+
+    /// Expects to be able to decode the value of tag somewhere throughout the
+    /// reader using the data type of T
+    ///
+    /// `reader` The reader to read from
+    /// `tag`    The tag to expect
+    pub fn expect<T: Codec>(reader: &mut Reader, tag: &str) -> CodecResult<T> {
+        let expected_type = T::value_type();
+        let _ = Self::decode_until(reader, tag, expected_type)?;
+        T::decode(reader)
     }
 
     pub fn try_expect<T: Codec>(reader: &mut Reader, tag: &str) -> CodecResult<Option<T>> {
