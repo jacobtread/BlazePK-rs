@@ -246,13 +246,13 @@ impl Tag {
             ValueType::Union => {
                 let ty = reader.take_one()?;
                 if ty != UNION_UNSET {
-                    out.push_str("Optional(");
+                    out.push_str("Union(");
                     let tag = Tag::decode(reader)?;
                     out.push_str(&format!("\"{}\", {:?}: ", &tag.0, ty));
                     Self::create_string_type(reader, out, indent + 1, &tag.1)?;
                     out.push_str(")")
                 } else {
-                    out.push_str("Optional(Empty)");
+                    out.push_str("Union(Unset)");
                 }
             }
             ValueType::VarIntList => {
