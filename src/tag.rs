@@ -43,6 +43,33 @@ impl Tag {
         }
     }
 
+    /// Attempting version of decode_until that returns true if the value was decoded up to
+    /// otherwise returns false. Marks the reader position before reading and resets the position
+    /// if the tag was not found
+    ///
+    /// `reader`        The reader to read from
+    /// `tag`       	The tag name to read until
+    /// `expected_type` The expected type of the tag
+    pub fn try_decode_until(reader: &mut Reader, tag: &str, expected_type: ValueType) -> bool {
+        reader.mark();
+        while let Ok(decoded) = Self::decode(reader) {
+            if decoded.0.ne(tag) {
+                if Self::discard_type(&decoded.1, reader).is_err() {
+                    break;
+                } else {
+                    continue;
+                }
+            }
+            // If the types don't match then break
+            if decoded.1.ne(&expected_type) {
+                break;
+            }
+            return true;
+        }
+        reader.reset_marker();
+        false
+    }
+
     /// Expects to be able to decode the value of tag somewhere throughout the
     /// reader using the data type of T
     ///
