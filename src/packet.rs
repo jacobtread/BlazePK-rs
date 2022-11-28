@@ -1,6 +1,7 @@
 use crate::codec::{decode_u16_be, encode_u16_be, Codec, CodecResult, Reader};
 #[cfg(feature = "blaze-ssl")]
 use blaze_ssl_async::stream::BlazeStream;
+use bytes::Bytes;
 use std::fmt::Debug;
 use std::io;
 #[cfg(feature = "sync")]
@@ -305,7 +306,7 @@ impl PacketHeader {
 #[derive(Debug, Clone)]
 pub struct Packet {
     pub header: PacketHeader,
-    pub contents: Vec<u8>,
+    pub contents: Bytes,
 }
 
 impl Packet {
@@ -314,7 +315,10 @@ impl Packet {
     /// `header`   The packet header
     /// `contents` The encoded packet contents
     pub fn raw(header: PacketHeader, contents: Vec<u8>) -> Self {
-        Self { header, contents }
+        Self {
+            header,
+            contents: Bytes::from(contents),
+        }
     }
 
     /// Creates a packet from its raw components
@@ -324,7 +328,7 @@ impl Packet {
     pub fn raw_empty(header: PacketHeader) -> Self {
         Self {
             header,
-            contents: Vec::with_capacity(0),
+            contents: Bytes::new(),
         }
     }
 
@@ -337,7 +341,7 @@ impl Packet {
     pub fn response<C: Codec>(packet: &Packet, contents: C) -> Self {
         Self {
             header: packet.header.response(),
-            contents: contents.encode_bytes(),
+            contents: Bytes::from(contents.encode_bytes()),
         }
     }
 
@@ -360,7 +364,7 @@ impl Packet {
     pub fn response_raw(packet: &Packet, contents: Vec<u8>) -> Self {
         Self {
             header: packet.header.response(),
-            contents,
+            contents: Bytes::from(contents),
         }
     }
 
@@ -371,7 +375,7 @@ impl Packet {
     pub fn response_empty(packet: &Packet) -> Self {
         Self {
             header: packet.header.response(),
-            contents: Vec::with_capacity(0),
+            contents: Bytes::new(),
         }
     }
 
@@ -394,7 +398,7 @@ impl Packet {
     pub fn error<C: Codec>(packet: &Packet, error: u16, contents: C) -> Self {
         Self {
             header: packet.header.with_error(error.into()),
-            contents: contents.encode_bytes(),
+            contents: Bytes::from(contents.encode_bytes()),
         }
     }
 
@@ -418,7 +422,7 @@ impl Packet {
     pub fn error_raw(packet: &Packet, error: u16, contents: Vec<u8>) -> Self {
         Self {
             header: packet.header.with_error(error.into()),
-            contents,
+            contents: Bytes::from(contents),
         }
     }
 
@@ -431,7 +435,7 @@ impl Packet {
     pub fn error_empty(packet: &Packet, error: u16) -> Packet {
         Self {
             header: packet.header.with_error(error.into()),
-            contents: Vec::with_capacity(0),
+            contents: Bytes::new(),
         }
     }
 
@@ -454,7 +458,7 @@ impl Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::notify(component, command),
-            contents: contents.encode_bytes(),
+            contents: Bytes::from(contents.encode_bytes()),
         }
     }
 
@@ -467,7 +471,7 @@ impl Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::notify(component, command),
-            contents,
+            contents: Bytes::from(contents),
         }
     }
 
@@ -480,7 +484,7 @@ impl Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::notify(component, command),
-            contents: Vec::with_capacity(0),
+            contents: Bytes::new(),
         }
     }
 
@@ -493,7 +497,7 @@ impl Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::request(id, component, command),
-            contents: contents.encode_bytes(),
+            contents: Bytes::from(contents.encode_bytes()),
         }
     }
 
@@ -507,7 +511,7 @@ impl Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::request(id, component, command),
-            contents,
+            contents: Bytes::from(contents),
         }
     }
 
@@ -521,7 +525,7 @@ impl Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::request(id, component, command),
-            contents: Vec::with_capacity(0),
+            contents: Bytes::new(),
         }
     }
 
@@ -544,7 +548,10 @@ impl Packet {
         let (header, length) = PacketHeader::read(input)?;
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents)?;
-        Ok(Self { header, contents })
+        Ok(Self {
+            header,
+            contents: Bytes::from(contents),
+        })
     }
 
     /// Asyncronously reads a packet from the provided input returning
@@ -559,7 +566,10 @@ impl Packet {
         let (header, length) = PacketHeader::read_async(input).await?;
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents).await?;
-        Ok(Self { header, contents })
+        Ok(Self {
+            header,
+            contents: Bytes::from(contents),
+        })
     }
 
     /// Asyncronously reads a packet from the provided blaze ssl input stream
@@ -576,7 +586,10 @@ impl Packet {
         let (header, length) = PacketHeader::read_blaze(input).await?;
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents).await?;
-        Ok(Self { header, contents })
+        Ok(Self {
+            header,
+            contents: Bytes::from(contents),
+        })
     }
 
     /// Syncronously reads a packet from the provided readable input
@@ -593,7 +606,13 @@ impl Packet {
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents)?;
         let component = T::from_header(&header);
-        Ok((component, Self { header, contents }))
+        Ok((
+            component,
+            Self {
+                header,
+                contents: Bytes::from(contents),
+            },
+        ))
     }
 
     /// Reads a packet from the provided input without parsing
@@ -609,7 +628,13 @@ impl Packet {
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents).await?;
         let component = T::from_header(&header);
-        Ok((component, Self { header, contents }))
+        Ok((
+            component,
+            Self {
+                header,
+                contents: Bytes::from(contents),
+            },
+        ))
     }
 
     /// Reads a packet from the provided input without parsing
@@ -625,7 +650,13 @@ impl Packet {
         let mut contents = vec![0u8; length];
         input.read_exact(&mut contents).await?;
         let component = T::from_header(&header);
-        Ok((component, Self { header, contents }))
+        Ok((
+            component,
+            Self {
+                header,
+                contents: Bytes::from(contents),
+            },
+        ))
     }
 
     /// Handles writing the header and contents of this packet to
