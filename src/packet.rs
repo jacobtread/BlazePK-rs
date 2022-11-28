@@ -341,6 +341,19 @@ impl Packet {
         }
     }
 
+    /// Creates a packet responding to the current packet.
+    /// Clones the header of the request packet and changes
+    /// the type to repsonse
+    ///
+    /// `packet`   The packet to respond to
+    /// `contents` The contents to encode for the packet
+    pub fn respond<C: Codec>(&self, contents: &C) -> Self {
+        Self {
+            header: self.header.response(),
+            contents: contents.encode_bytes(),
+        }
+    }
+
     /// Creates a response packet responding to the provided packet
     /// but with raw contents that have already been encoded.
     ///
@@ -364,25 +377,51 @@ impl Packet {
         }
     }
 
+    /// Creates a response packet responding to the provided packet
+    /// but with empty contents.
+    ///
+    /// `packet`   The packet to respond to
+    /// `contents` The contents to encode for the packet
+    pub fn respond_empty(&self) -> Self {
+        Self {
+            header: self.header.response(),
+            contents: Vec::with_capacity(0),
+        }
+    }
+
     /// Creates a error respond packet responding to the provided
     /// packet with the provided error and contents
     ///
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     /// `contents` The response contents
-    pub fn error<C: Codec>(packet: &Packet, error: impl Into<u16>, contents: &C) -> Self {
+    pub fn error<C: Codec>(packet: &Packet, error: u16, contents: &C) -> Self {
         Self {
             header: packet.header.with_error(error.into()),
             contents: contents.encode_bytes(),
         }
     }
+
+    /// Creates a error respond packet responding to the provided
+    /// packet with the provided error and contents
+    ///
+    /// `packet`   The packet to respond to
+    /// `error`    The response error value
+    /// `contents` The response contents
+    pub fn respond_error<C: Codec>(&self, error: u16, contents: &C) -> Self {
+        Self {
+            header: self.header.with_error(error.into()),
+            contents: contents.encode_bytes(),
+        }
+    }
+
     /// Creates a error respond packet responding to the provided
     /// packet with the provided error and raw encoded contents
     ///
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     /// `contents` The raw encoded contents
-    pub fn error_raw(packet: &Packet, error: impl Into<u16>, contents: Vec<u8>) -> Self {
+    pub fn error_raw(packet: &Packet, error: u16, contents: Vec<u8>) -> Self {
         Self {
             header: packet.header.with_error(error.into()),
             contents,
@@ -395,9 +434,22 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     #[inline]
-    pub fn error_empty(packet: &Packet, error: impl Into<u16>) -> Packet {
+    pub fn error_empty(packet: &Packet, error: u16) -> Packet {
         Self {
             header: packet.header.with_error(error.into()),
+            contents: Vec::with_capacity(0),
+        }
+    }
+
+    /// Creates a error respond packet responding to the provided
+    /// packet with the provided error with empty contents
+    ///
+    /// `packet`   The packet to respond to
+    /// `error`    The response error value
+    #[inline]
+    pub fn respond_error_empty(&self, error: u16) -> Packet {
+        Self {
+            header: self.header.with_error(error.into()),
             contents: Vec::with_capacity(0),
         }
     }
