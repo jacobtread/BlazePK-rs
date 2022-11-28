@@ -334,7 +334,7 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
-    pub fn response<C: Codec>(packet: &Packet, contents: &C) -> Self {
+    pub fn response<C: Codec>(packet: &Packet, contents: C) -> Self {
         Self {
             header: packet.header.response(),
             contents: contents.encode_bytes(),
@@ -347,11 +347,9 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
-    pub fn respond<C: Codec>(&self, contents: &C) -> Self {
-        Self {
-            header: self.header.response(),
-            contents: contents.encode_bytes(),
-        }
+    #[inline]
+    pub fn respond<C: Codec>(&self, contents: C) -> Self {
+        Self::response(self, contents)
     }
 
     /// Creates a response packet responding to the provided packet
@@ -382,11 +380,9 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
+    #[inline]
     pub fn respond_empty(&self) -> Self {
-        Self {
-            header: self.header.response(),
-            contents: Vec::with_capacity(0),
-        }
+        Self::response_empty(self)
     }
 
     /// Creates a error respond packet responding to the provided
@@ -395,7 +391,7 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     /// `contents` The response contents
-    pub fn error<C: Codec>(packet: &Packet, error: u16, contents: &C) -> Self {
+    pub fn error<C: Codec>(packet: &Packet, error: u16, contents: C) -> Self {
         Self {
             header: packet.header.with_error(error.into()),
             contents: contents.encode_bytes(),
@@ -408,11 +404,9 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     /// `contents` The response contents
-    pub fn respond_error<C: Codec>(&self, error: u16, contents: &C) -> Self {
-        Self {
-            header: self.header.with_error(error.into()),
-            contents: contents.encode_bytes(),
-        }
+    #[inline]
+    pub fn respond_error<C: Codec>(&self, error: u16, contents: C) -> Self {
+        Self::error(self, error, contents)
     }
 
     /// Creates a error respond packet responding to the provided
@@ -448,10 +442,7 @@ impl Packet {
     /// `error`    The response error value
     #[inline]
     pub fn respond_error_empty(&self, error: u16) -> Packet {
-        Self {
-            header: self.header.with_error(error.into()),
-            contents: Vec::with_capacity(0),
-        }
+        Self::error_empty(self, error)
     }
 
     /// Creates a notify packet for the provided component with the
@@ -459,7 +450,7 @@ impl Packet {
     ///
     /// `component` The packet component to use for the header
     /// `contents`  The contents of the packet to encode
-    pub fn notify<C: Codec, T: PacketComponents>(component: T, contents: &C) -> Packet {
+    pub fn notify<C: Codec, T: PacketComponents>(component: T, contents: C) -> Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::notify(component, command),
@@ -498,7 +489,7 @@ impl Packet {
     /// `id`        The packet id
     /// `component` The packet component
     /// `contents`  The packet contents
-    pub fn request<C: Codec, T: PacketComponents>(id: u16, component: T, contents: &C) -> Packet {
+    pub fn request<C: Codec, T: PacketComponents>(id: u16, component: T, contents: C) -> Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::request(id, component, command),
@@ -737,10 +728,7 @@ mod test {
             aa: 32,
         };
         println!("{:?}", contents);
-        let packet = Packet::notify(
-            Components::Authentication(Authentication::Second),
-            &contents,
-        );
+        let packet = Packet::notify(Components::Authentication(Authentication::Second), contents);
         println!("{packet:?}");
 
         let mut out = Cursor::new(Vec::new());
