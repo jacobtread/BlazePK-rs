@@ -1,4 +1,4 @@
-use crate::{error::DecodeResult, tag::TdfType};
+use crate::{error::DecodeResult, reader::TdfReader, tag::TdfType, writer::TdfWriter};
 use std::{
     fmt::{Debug, Formatter},
     io::{self, Read},
@@ -88,7 +88,7 @@ pub trait Decodable: Sized {
     /// cannot be decoded
     ///
     /// `reader` The reader to decode from
-    fn decode(reader: &mut Reader) -> DecodeResult<Self>;
+    fn decode(reader: &mut TdfReader) -> DecodeResult<Self>;
 
     /// Function to provide functionality for skipping this
     /// data type (e.g. read the bytes without using them)
@@ -98,7 +98,7 @@ pub trait Decodable: Sized {
     /// performant version
     ///
     /// `reader` The reader to skip with
-    fn skip(reader: &mut Reader) -> DecodeResult<()> {
+    fn skip(reader: &mut TdfReader) -> DecodeResult<()> {
         let _ = Self::decode(reader)?;
     }
 }
@@ -108,20 +108,31 @@ pub trait Encodable: Sized {
     /// provided vec of bytes
     ///
     /// `output` The output to decode to
-    fn encode(&self, output: &mut Vec<u8>);
+    fn encode(&self, output: &mut TdfWriter);
 
     /// Shortcut function for encoding self directly to
     /// a Vec of bytes
     fn encode_bytes(&self) -> Vec<u8> {
-        let mut output = Vec::new();
+        let mut output = TdfWriter::default();
         self.encode(&mut output);
-        output
+        output.into()
     }
 }
 
 pub trait ValueType {
     /// The type of tdf value this is
     fn value_type() -> TdfType;
+}
+
+#[macro_export]
+macro_rules! value_type {
+    ($for:ty, $type:expr) => {
+        impl $crate::codec::ValueType for $for {
+            fn value_type() -> $crate::tag::TdfType {
+                $type
+            }
+        }
+    };
 }
 
 /// Attempts to decode a u16 value from the provided slice

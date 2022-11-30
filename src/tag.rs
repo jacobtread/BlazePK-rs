@@ -1,5 +1,7 @@
 use crate::codec::{Codec, CodecError, CodecResult, Decodable, Encodable, Reader};
+use crate::reader::TdfReader;
 use crate::types::{Blob, VarIntList, UNION_UNSET};
+use crate::writer::TdfWriter;
 use std::fmt::Debug;
 
 /// Tag for a Tdf value. This contains the String tag for naming
@@ -436,14 +438,15 @@ pub enum TdfType {
 }
 
 impl Encodable for TdfType {
-    fn encode(&self, output: &mut Vec<u8>) {
-        output.push(self.value());
+    #[inline]
+    fn encode(&self, output: &mut TdfWriter) {
+        output.write_byte(self.value())
     }
 }
 
 impl Decodable for TdfType {
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        reader.take_one().map(TdfType::from_value)
+    fn decode(reader: &mut TdfReader) -> CodecResult<Self> {
+        reader.read_byte().map(TdfType::from_value)
     }
 }
 
