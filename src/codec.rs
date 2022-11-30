@@ -15,7 +15,7 @@ pub trait Encodable: Sized {
     /// provided vec of bytes
     ///
     /// `output` The output to decode to
-    fn encode(&self, output: &mut TdfWriter);
+    fn encode(&self, writer: &mut TdfWriter);
 
     /// Shortcut function for encoding self directly to
     /// a Vec of bytes
