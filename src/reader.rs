@@ -101,7 +101,7 @@ impl<'a> TdfReader<'a> {
     ///
     /// `length` The length to expect
     fn expect_length(&self, length: usize) -> DecodeResult<()> {
-        if self.cursor + length >= self.buffer.len() {
+        if self.cursor + length > self.buffer.len() {
             Err(DecodeError::UnexpectedEof {
                 cursor: self.cursor,
                 wanted: length,
