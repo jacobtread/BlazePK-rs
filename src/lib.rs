@@ -9,3 +9,4 @@ pub mod reader;
 pub mod tag;
 pub mod tagging;
 pub mod types;
+pub mod writer;

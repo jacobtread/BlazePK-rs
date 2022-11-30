@@ -385,10 +385,7 @@ impl Encodable for Tag {
 
 impl Decodable for Tag {
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let tag: &[u8; 4] = reader
-            .take(4)?
-            .try_into()
-            .map_err(|_| CodecError::UnknownError)?;
+        let tag: &[u8; 4] = reader.take(4)?.into();
 
         let value_type = TdfType::from_value(tag[3]);
         let mut output: [u8; 4] = [0, 0, 0, 0];

@@ -2,6 +2,7 @@ use crate::tag::TdfType;
 
 /// Error type for errors that can occur while decoding a value
 /// using the tdf decode
+#[derive(Debug)]
 pub enum DecodeError {
     /// The tag that was expected could not be found
     MissingTag {
@@ -27,6 +28,13 @@ pub enum DecodeError {
         /// The actual tdf type
         actual: TdfType,
     },
+
+    /// Encountered an unknown tag type
+    UnknownType {
+        /// The tag type value
+        ty: u8,
+    },
+
     /// Reached the end of the available bytes before
     /// a value could be obtained
     UnexpectedEof {
@@ -39,5 +47,5 @@ pub enum DecodeError {
     },
 }
 
-/// Type alias
+/// Type alias for result which could result in a Decode Error
 pub type DecodeResult<T> = Result<T, DecodeError>;

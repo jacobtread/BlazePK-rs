@@ -515,9 +515,7 @@ impl Codec for f32 {
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
         let bytes = reader.take(4)?;
-        Ok(f32::from_be_bytes(
-            bytes.try_into().map_err(|_| CodecError::UnknownError)?,
-        ))
+        Ok(f32::from_be_bytes(bytes.try_into().unwrap()))
     }
 }
 
@@ -760,13 +758,6 @@ pub fn encode_str(value: &str, output: &mut Vec<u8>) {
 impl Codec for &'_ str {
     fn encode(&self, output: &mut Vec<u8>) {
         encode_str(self, output);
-    }
-
-    fn decode(_reader: &mut Reader) -> CodecResult<Self> {
-        // Static string cannot be decoded only encoded
-        Err(CodecError::InvalidAction(
-            "Attempted to decode string with static lifetime",
-        ))
     }
 
     fn value_type() -> TdfType {

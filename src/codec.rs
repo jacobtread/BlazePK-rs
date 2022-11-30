@@ -1,4 +1,4 @@
-use crate::tag::TdfType;
+use crate::{error::DecodeResult, tag::TdfType};
 use std::{
     fmt::{Debug, Formatter},
     io::{self, Read},
@@ -82,63 +82,13 @@ impl<'a> Reader<'a> {
     }
 }
 
-/// Errors for when decoding packet structures
-pub enum CodecError {
-    MissingField(String),
-    UnexpectedType(TdfType, TdfType),
-    UnexpectedFieldType(String, TdfType, TdfType),
-    NotEnoughBytes(usize, usize, usize),
-    UnknownError,
-    InvalidAction(&'static str),
-    Other(&'static str),
-}
-
-impl Debug for CodecError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CodecError::MissingField(field) => write!(f, "Missing field {field}"),
-
-            CodecError::UnexpectedType(expected, got) => {
-                write!(
-                    f,
-                    "Unexpected type; expected {:?} but got {:?}",
-                    expected, got
-                )
-            }
-            CodecError::UnexpectedFieldType(field, expected, got) => {
-                write!(
-                    f,
-                    "Unexpected type for field {} expected {:?} but got {:?}",
-                    field, expected, got
-                )
-            }
-            CodecError::NotEnoughBytes(cursor, wanted, remaining) => {
-                write!(
-                    f,
-                    "Didn't have enough bytes (cursor: {}, wanted: {}, remaining: {})",
-                    cursor, wanted, remaining
-                )
-            }
-            CodecError::UnknownError => {
-                f.write_str("Unknown error occurred when trying to fit bytes")
-            }
-            CodecError::InvalidAction(value) => {
-                write!(f, "Attempt invalid action: {value}")
-            }
-            CodecError::Other(err) => f.write_str(err),
-        }
-    }
-}
-
-pub type CodecResult<T> = Result<T, CodecError>;
-
 pub trait Decodable: Sized {
     /// Function for implementing decoding of Self from
     /// the provided Reader. Will return None if self
     /// cannot be decoded
     ///
     /// `reader` The reader to decode from
-    fn decode(reader: &mut Reader) -> CodecResult<Self>;
+    fn decode(reader: &mut Reader) -> DecodeResult<Self>;
 
     /// Function to provide functionality for skipping this
     /// data type (e.g. read the bytes without using them)
@@ -148,7 +98,7 @@ pub trait Decodable: Sized {
     /// performant version
     ///
     /// `reader` The reader to skip with
-    fn skip(reader: &mut Reader) -> CodecResult<()> {
+    fn skip(reader: &mut Reader) -> DecodeResult<()> {
         let _ = Self::decode(reader)?;
     }
 }
