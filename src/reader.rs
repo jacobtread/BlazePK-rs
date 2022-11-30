@@ -77,7 +77,7 @@ impl<'a> TdfReader<'a> {
     /// `length` The length of the slice to take
     pub fn read_slice(&mut self, length: usize) -> DecodeResult<&[u8]> {
         // Ensure we have the required number of bytes
-        if self.cursor + length >= self.buffer.len() {
+        if self.cursor + length > self.buffer.len() {
             return Err(DecodeError::UnexpectedEof {
                 cursor: self.cursor,
                 wanted: length,
