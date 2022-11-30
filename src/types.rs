@@ -141,6 +141,12 @@ impl<C> Into<Option<C>> for Union<C> {
     }
 }
 
+impl<C> ValueType for Union<C> {
+    fn value_type() -> TdfType {
+        TdfType::Union
+    }
+}
+
 impl<C> Encodable for Union<C>
 where
     C: Encodable + ValueType,
