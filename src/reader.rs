@@ -391,6 +391,7 @@ impl<'a> TdfReader<'a> {
     pub fn skip_var_int(&mut self) {
         while self.cursor < self.buffer.len() {
             let byte = self.buffer[self.cursor];
+            self.cursor += 1;
             if byte < 128 {
                 break;
             }
