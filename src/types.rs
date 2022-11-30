@@ -1,10 +1,8 @@
-use crate::codec::{
-    Codec, CodecError, CodecResult, Decodable, Encodable, Reader, TdfType, ValueType,
-};
+use crate::codec::{Decodable, Encodable, ValueType};
 
 use crate::error::{DecodeError, DecodeResult};
 use crate::reader::TdfReader;
-use crate::tag::{Tag, TdfType};
+use crate::tag::TdfType;
 use crate::value_type;
 use crate::writer::TdfWriter;
 use std::borrow::Borrow;
@@ -12,14 +10,10 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::slice::Iter;
 
-pub trait TdfGroup: Codec + Debug {
-    fn start_two() -> bool;
-}
-
 #[derive(Debug, PartialEq, Eq)]
-pub struct VarIntList<T: VarInt>(pub Vec<T>);
+pub struct VarIntList<T>(pub Vec<T>);
 
-impl<T: VarInt> VarIntList<T> {
+impl<T> VarIntList<T> {
     /// Creates a new VarIntList
     pub fn new() -> Self {
         Self(Vec::new())
@@ -61,6 +55,38 @@ impl<T: VarInt> VarIntList<T> {
     /// a borrow if one is there
     pub fn get(&mut self, index: usize) -> Option<&T> {
         self.0.get(index)
+    }
+}
+
+impl<C> Encodable for VarIntList<C>
+where
+    C: VarInt,
+{
+    fn encode(&self, output: &mut TdfWriter) {
+        output.write_usize(self.0.len());
+        for value in &self.0 {
+            value.encode(output);
+        }
+    }
+}
+
+impl<C> Decodable for VarIntList<C>
+where
+    C: VarInt,
+{
+    fn decode(reader: &mut TdfReader) -> DecodeResult<Self> {
+        let length = reader.read_usize()?;
+        let mut out = Vec::with_capacity(length);
+        for _ in 0..length {
+            out.push(C::decode(reader)?);
+        }
+        Ok(VarIntList(out))
+    }
+}
+
+impl<C> ValueType for VarIntList<C> {
+    fn value_type() -> TdfType {
+        TdfType::VarIntList
     }
 }
 
@@ -119,14 +145,14 @@ impl<C> Encodable for Union<C>
 where
     C: Encodable + ValueType,
 {
-    fn encode(&self, output: &mut Vec<u8>) {
+    fn encode(&self, output: &mut TdfWriter) {
         match self {
             Union::Set { key, tag, value } => {
-                output.push(*key);
-                Tag::encode_from(tag, &C::value_type(), output);
+                output.write_byte(*key);
+                output.tag(tag.as_bytes(), C::value_type());
                 value.encode(output);
             }
-            Union::Unset => output.push(UNION_UNSET),
+            Union::Unset => output.write_byte(UNION_UNSET),
         }
     }
 }
@@ -135,18 +161,21 @@ impl<C> Decodable for Union<C>
 where
     C: Decodable + ValueType,
 {
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let key = reader.take_one()?;
+    fn decode(reader: &mut TdfReader) -> DecodeResult<Self> {
+        let key = reader.read_byte()?;
         if key == UNION_UNSET {
             return Ok(Union::Unset);
         }
-        let tag = Tag::decode(reader)?;
-        let expected_type = T::value_type();
+        let tag = reader.read_tag()?;
+        let expected_type = C::value_type();
         let actual_type = tag.1;
         if actual_type != expected_type {
-            return Err(CodecError::UnexpectedType(expected_type, actual_type));
+            return Err(DecodeError::InvalidType {
+                expected: expected_type,
+                actual: actual_type,
+            });
         }
-        let value = T::decode(reader)?;
+        let value = C::decode(reader)?;
 
         Ok(Union::Set {
             key,
@@ -177,7 +206,6 @@ impl_var_int!(u8, i8, u16, i16, u32, i32, u64, i64, usize, isize);
 /// Structure for maps used in the protocol. These maps have a special
 /// order that is usually required and they retain the order of insertion
 /// because it uses two vecs as the underlying structure
-#[derive(Default)]
 pub struct TdfMap<K, V> {
     /// The keys stored in this map
     keys: Vec<K>,
@@ -185,12 +213,35 @@ pub struct TdfMap<K, V> {
     values: Vec<V>,
 }
 
+impl<K, V> Default for TdfMap<K, V> {
+    fn default() -> Self {
+        Self {
+            keys: Vec::new(),
+            values: Vec::new(),
+        }
+    }
+}
+
+impl<K, V> Debug for TdfMap<K, V>
+where
+    K: Debug,
+    V: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TdfMap {")?;
+        for (key, value) in self.iter() {
+            write!(f, "  \"{key:?}\": \"{value:?}\"\n")?;
+        }
+        f.write_str("}")
+    }
+}
+
 impl<K, V> TdfMap<K, V> {
     /// Constructor implemention just uses the underlying default
     /// implemenation
     #[inline]
     pub fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 
     /// Function for creating a new TdfMap where the underlying
@@ -238,23 +289,33 @@ impl<K, V> TdfMap<K, V> {
     /// Removes the last key and value returning them or None
     /// if there are no entries
     pub fn pop(&mut self) -> Option<(K, V)> {
-        let key = self.keys.pop();
-        let value = self.values.pop();
+        let key = self.keys.pop()?;
+        let value = self.values.pop()?;
         Some((key, value))
+    }
+
+    /// Iterator access for the map keys
+    pub fn keys(&self) -> Iter<'_, K> {
+        self.keys.iter()
+    }
+
+    /// Iterator access for the map values
+    pub fn values(&self) -> Iter<'_, V> {
+        self.values.iter()
     }
 }
 
 impl<K, V> TdfMap<K, V>
 where
-    K: PartialEq,
+    K: PartialEq + Eq,
 {
     /// Extends this map with the contents of another map. Any keys that already
     /// exist in the map will be replaced with the keys from the other map
     /// and any keys not present will be inserted
     ///
     /// `other` The map to extend with
-    pub fn extend(&mut self, mut other: TdfMap<K, V>) {
-        while let Some((key, value)) = other.pop_front() {
+    pub fn extend(&mut self, other: TdfMap<K, V>) {
+        for (key, value) in other.into_iter() {
             let key_index: Option<usize> = self.keys.iter().position(|value| key.eq(value));
             if let Some(index) = key_index {
                 self.values[index] = value;
@@ -274,7 +335,7 @@ where
         Q: Eq,
     {
         for index in 0..self.keys.len() {
-            let key_at: &K = self.keys[index].borrow();
+            let key_at = self.keys[index].borrow();
             if key_at.eq(key) {
                 return Some(index);
             }
@@ -354,6 +415,21 @@ impl<'a, K, V> Iterator for TdfMapIter<'a, K, V> {
     }
 }
 
+pub struct OwnedTdfMapIter<K, V> {
+    keys: Vec<K>,
+    values: Vec<V>,
+}
+
+impl<K, V> Iterator for OwnedTdfMapIter<K, V> {
+    type Item = (K, V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let key = self.keys.pop()?;
+        let value = self.values.pop()?;
+        Some((key, value))
+    }
+}
+
 impl<K, V> Encodable for TdfMap<K, V>
 where
     K: Encodable + ValueType,
@@ -416,12 +492,12 @@ where
 
 /// Implementation for converting a HashMap to a TdfMap by taking
 /// all its keys and values and building lists for the TdfMap
-impl<K: MapKey, V: Codec> From<HashMap<K, V>> for TdfMap<K, V> {
+impl<K, V> From<HashMap<K, V>> for TdfMap<K, V> {
     fn from(map: HashMap<K, V>) -> Self {
-        let mut keys = Vec::with_capacity(map.len());
-        let mut values = Vec::with_capacity(map.len());
+        let mut keys: Vec<K> = Vec::with_capacity(map.len());
+        let mut values: Vec<V> = Vec::with_capacity(map.len());
 
-        for (key, value) in map {
+        for (key, value) in map.into_iter() {
             keys.push(key);
             values.push(value)
         }
@@ -430,94 +506,16 @@ impl<K: MapKey, V: Codec> From<HashMap<K, V>> for TdfMap<K, V> {
     }
 }
 
-impl<K: MapKey, V: Codec> TdfMap<K, V> {
-    /// Takes the value stored at the provided key out of
-    /// the map taking ownership this also removes the key.
-    pub fn get_owned<Q: ?Sized>(&mut self, key: &Q) -> Option<V>
-    where
-        K: Borrow<Q>,
-        Q: Eq,
-    {
-        let index = self.index_of_key(key)?;
-        let value = self.values.remove(index);
-        self.keys.remove(index);
-        Some(value)
-    }
+impl<K, V> IntoIterator for TdfMap<K, V> {
+    type Item = (K, V);
+    type IntoIter = OwnedTdfMapIter<K, V>;
 
-    /// Iterator access for the map keys
-    pub fn keys(&self) -> Iter<'_, K> {
-        self.keys.iter()
-    }
-
-    /// Iterator access for the map values
-    pub fn values(&self) -> Iter<'_, V> {
-        self.values.iter()
-    }
-
-    /// Returns the length of this map
-    pub fn len(&self) -> usize {
-        self.keys.len()
-    }
-
-    /// Returns the key value pair stored at the
-    /// provided index if one exists
-    pub fn at_index(&self, index: usize) -> Option<(&K, &V)> {
-        let key = self.keys.get(index)?;
-        let value = self.values.get(index)?;
-        Some((key, value))
-    }
-
-    pub fn iter<'a>(&'a self) -> TdfMapIter<'a, K, V> {
-        TdfMapIter {
-            map: self,
-            index: 0,
-        }
-    }
-
-    /// Prepares for iteration by reversing the keys
-    /// and the values
-    pub fn flip_iter(&mut self) {
+    fn into_iter(mut self) -> Self::IntoIter {
         self.keys.reverse();
         self.values.reverse();
-    }
-}
-
-/// Call `flip_iter` to iterate in the correct direction
-impl<K: MapKey, V: Codec> Iterator for TdfMap<K, V> {
-    type Item = (K, V);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let key = self.keys.pop()?;
-        let value = self.values.pop()?;
-        Some((key, value))
-    }
-}
-/// Iterator implementation for the TdfMap
-/// for iterating over the entries in the
-/// Map
-pub struct TdfMapIter<'a, K: MapKey, V: Codec> {
-    map: &'a TdfMap<K, V>,
-    index: usize,
-}
-
-impl<'a, K: MapKey, V: Codec> Iterator for TdfMapIter<'a, K, V> {
-    type Item = (&'a K, &'a V);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let value = self.map.at_index(self.index);
-        self.index += 1;
-        value
-    }
-}
-
-impl<'a, K: MapKey, V: Codec> IntoIterator for &'a TdfMap<K, V> {
-    type Item = (&'a K, &'a V);
-    type IntoIter = TdfMapIter<'a, K, V>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        TdfMapIter {
-            map: self,
-            index: 0,
+        OwnedTdfMapIter {
+            keys: self.keys,
+            values: self.values,
         }
     }
 }
@@ -645,14 +643,14 @@ impl Decodable for u64 {
 impl Encodable for usize {
     #[inline]
     fn encode(&self, output: &mut TdfWriter) {
-        output.write_u64(*self)
+        output.write_usize(*self)
     }
 }
 
 impl Decodable for usize {
     #[inline]
     fn decode(reader: &mut TdfReader) -> DecodeResult<Self> {
-        reader.read_u64()
+        reader.read_usize()
     }
 }
 
@@ -660,11 +658,13 @@ value_type!(u8, TdfType::VarInt);
 value_type!(u16, TdfType::VarInt);
 value_type!(u32, TdfType::VarInt);
 value_type!(u64, TdfType::VarInt);
+value_type!(usize, TdfType::VarInt);
 
 forward_codec!(i8, u8);
 forward_codec!(i16, u16);
 forward_codec!(i32, u32);
 forward_codec!(i64, u64);
+forward_codec!(isize, usize);
 
 impl Encodable for &'_ str {
     #[inline]
@@ -721,7 +721,7 @@ where
     C: Encodable + ValueType,
 {
     fn encode(&self, output: &mut TdfWriter) {
-        C::value_type().encode(output);
+        output.write_type(C::value_type());
         output.write_usize(self.len());
         for value in self {
             value.encode(output);
@@ -734,7 +734,7 @@ where
     C: Decodable + ValueType,
 {
     fn decode(reader: &mut TdfReader) -> DecodeResult<Self> {
-        let value_type = TdfType::decode(reader)?;
+        let value_type: TdfType = reader.read_type()?;
         let expected_type = C::value_type();
         if value_type != expected_type {
             return Err(DecodeError::InvalidType {
@@ -758,35 +758,13 @@ impl<C> ValueType for Vec<C> {
     }
 }
 
-impl<T: VarInt> Codec for VarIntList<T> {
-    fn encode(&self, output: &mut Vec<u8>) {
-        self.0.len().encode(output);
-        for value in &self.0 {
-            value.encode(output);
-        }
-    }
-
-    fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let length = usize::decode(reader)?;
-        let mut out = Vec::with_capacity(length);
-        for _ in 0..length {
-            out.push(T::decode(reader)?)
-        }
-        Ok(VarIntList(out))
-    }
-
-    fn value_type() -> TdfType {
-        TdfType::VarIntList
-    }
-}
-
 /// Pair type alias. (Note Pairs should only ever be used with VarInts)
 type Pair<A, B> = (A, B);
 
 impl<A, B> Encodable for Pair<A, B>
 where
-    A: Encodable,
-    B: Encodable,
+    A: VarInt,
+    B: VarInt,
 {
     fn encode(&self, output: &mut TdfWriter) {
         self.0.encode(output);
@@ -796,12 +774,12 @@ where
 
 impl<A, B> Decodable for Pair<A, B>
 where
-    A: Decodable,
-    B: Decodable,
+    A: VarInt,
+    B: VarInt,
 {
     fn decode(reader: &mut TdfReader) -> DecodeResult<Self> {
-        let a = A::decode(reader);
-        let b = B::decode(reader);
+        let a = A::decode(reader)?;
+        let b = B::decode(reader)?;
         Ok((a, b))
     }
 }
@@ -817,9 +795,9 @@ type Triple<A, B, C> = (A, B, C);
 
 impl<A, B, C> Encodable for Triple<A, B, C>
 where
-    A: Encodable,
-    B: Encodable,
-    C: Encodable,
+    A: VarInt,
+    B: VarInt,
+    C: VarInt,
 {
     fn encode(&self, output: &mut TdfWriter) {
         self.0.encode(output);
@@ -829,15 +807,15 @@ where
 }
 impl<A, B, C> Decodable for Triple<A, B, C>
 where
-    A: Decodable,
-    B: Decodable,
-    C: Decodable,
+    A: VarInt,
+    B: VarInt,
+    C: VarInt,
 {
     fn decode(reader: &mut TdfReader) -> DecodeResult<Self> {
         let a = A::decode(reader)?;
         let b = B::decode(reader)?;
         let c = C::decode(reader)?;
-        Ok((a, b))
+        Ok((a, b, c))
     }
 }
 
@@ -852,6 +830,7 @@ mod test {
     use crate::codec::{Decodable, Encodable};
     use crate::reader::TdfReader;
     use crate::types::TdfMap;
+    use crate::writer::TdfWriter;
 
     #[test]
     fn test_map_ord() {
@@ -906,9 +885,9 @@ mod test {
     #[test]
     fn test_u8() {
         for value in u8::MIN..u8::MAX {
-            let mut out = Vec::with_capacity(4);
+            let mut out = TdfWriter { buffer: Vec::new() };
             value.encode(&mut out);
-            let mut reader = TdfReader::new(&out);
+            let mut reader = TdfReader::new(&out.buffer);
             let v2 = u8::decode(&mut reader).unwrap();
             assert_eq!(value, v2)
         }
@@ -917,9 +896,9 @@ mod test {
     #[test]
     fn test_u16() {
         for value in u16::MIN..u16::MAX {
-            let mut out = Vec::new();
+            let mut out = TdfWriter { buffer: Vec::new() };
             value.encode(&mut out);
-            let mut reader = TdfReader::new(&out);
+            let mut reader = TdfReader::new(&out.buffer);
             let v2 = u16::decode(&mut reader).unwrap();
             assert_eq!(value, v2)
         }

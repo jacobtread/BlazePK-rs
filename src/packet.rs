@@ -1,4 +1,8 @@
-use crate::codec::{decode_u16_be, encode_u16_be, Codec, CodecResult, Reader};
+use crate::{
+    codec::{decode_u16_be, encode_u16_be, Decodable, Encodable},
+    error::DecodeResult,
+    reader::TdfReader,
+};
 #[cfg(feature = "blaze-ssl")]
 use blaze_ssl_async::stream::BlazeStream;
 use bytes::Bytes;
@@ -338,7 +342,7 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
-    pub fn response<C: Codec>(packet: &Packet, contents: C) -> Self {
+    pub fn response<C: Encodable>(packet: &Packet, contents: C) -> Self {
         Self {
             header: packet.header.response(),
             contents: Bytes::from(contents.encode_bytes()),
@@ -352,7 +356,7 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
     #[inline]
-    pub fn respond<C: Codec>(&self, contents: C) -> Self {
+    pub fn respond<C: Encodable>(&self, contents: C) -> Self {
         Self::response(self, contents)
     }
 
@@ -395,7 +399,7 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     /// `contents` The response contents
-    pub fn error<C: Codec>(packet: &Packet, error: u16, contents: C) -> Self {
+    pub fn error<C: Encodable>(packet: &Packet, error: u16, contents: C) -> Self {
         Self {
             header: packet.header.with_error(error.into()),
             contents: Bytes::from(contents.encode_bytes()),
@@ -409,7 +413,7 @@ impl Packet {
     /// `error`    The response error value
     /// `contents` The response contents
     #[inline]
-    pub fn respond_error<C: Codec>(&self, error: u16, contents: C) -> Self {
+    pub fn respond_error<C: Encodable>(&self, error: u16, contents: C) -> Self {
         Self::error(self, error, contents)
     }
 
@@ -454,7 +458,7 @@ impl Packet {
     ///
     /// `component` The packet component to use for the header
     /// `contents`  The contents of the packet to encode
-    pub fn notify<C: Codec, T: PacketComponents>(component: T, contents: C) -> Packet {
+    pub fn notify<C: Encodable, T: PacketComponents>(component: T, contents: C) -> Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::notify(component, command),
@@ -493,7 +497,11 @@ impl Packet {
     /// `id`        The packet id
     /// `component` The packet component
     /// `contents`  The packet contents
-    pub fn request<C: Codec, T: PacketComponents>(id: u16, component: T, contents: C) -> Packet {
+    pub fn request<C: Encodable, T: PacketComponents>(
+        id: u16,
+        component: T,
+        contents: C,
+    ) -> Packet {
         let (component, command) = component.values();
         Self {
             header: PacketHeader::request(id, component, command),
@@ -531,8 +539,8 @@ impl Packet {
 
     /// Attempts to decode the contents bytes of this packet into the
     /// provided Codec type value.
-    pub fn decode<C: Codec>(&self) -> CodecResult<C> {
-        let mut reader = Reader::new(&self.contents);
+    pub fn decode<C: Decodable>(&self) -> DecodeResult<C> {
+        let mut reader = TdfReader::new(&self.contents);
         C::decode(&mut reader)
     }
 
@@ -720,58 +728,5 @@ impl Packet {
         let mut output = Vec::with_capacity(14 + self.contents.len());
         self.write_bytes(&mut output);
         output
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::packet::Packet;
-    use crate::{define_components, packet};
-    use std::io::Cursor;
-
-    packet! {
-        struct Test {
-            TEST test: String,
-            ALT alt: u32,
-            AA aa: u32,
-        }
-    }
-
-    define_components! {
-        Authentication (0x0) {
-            First (0x1)
-            Second (0x2)
-            Third (0x3)
-        }
-
-        Other (0x1) {
-            First (0x1)
-            Second (0x2)
-            Third (0x3)
-        }
-    }
-
-    #[test]
-    fn test() {
-        let contents = Test {
-            test: String::from("Test"),
-            alt: 0,
-            aa: 32,
-        };
-        println!("{:?}", contents);
-        let packet = Packet::notify(Components::Authentication(Authentication::Second), contents);
-        println!("{packet:?}");
-
-        let mut out = Cursor::new(Vec::new());
-        packet.write(&mut out).unwrap();
-
-        let bytes = out.get_ref();
-        println!("{bytes:?}");
-        let mut bytes_in = Cursor::new(bytes);
-
-        let packet_in = Packet::read(&mut bytes_in).unwrap();
-        println!("{packet_in:?}");
-        let packet_in_dec: Test = packet_in.decode().unwrap();
-        println!("{packet_in_dec:?}");
     }
 }
