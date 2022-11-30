@@ -1,11 +1,11 @@
-use crate::codec::{Codec, CodecError, CodecResult, Reader};
+use crate::codec::{Codec, CodecError, CodecResult, Decodable, Encodable, Reader};
 use crate::types::{Blob, VarIntList, UNION_UNSET};
 use std::fmt::Debug;
 
 /// Tag for a Tdf value. This contains the String tag for naming
 /// the field and then the type of the field
 #[derive(Debug, Eq, PartialEq)]
-pub struct Tag(pub String, pub ValueType);
+pub struct Tag(pub String, pub TdfType);
 
 impl Tag {
     /// Decodes tags from the reader until the tag with the provided tag name
@@ -15,11 +15,7 @@ impl Tag {
     /// `reader`        The reader to read from
     /// `tag`       	The tag name to read until
     /// `expected_type` The expected type of the tag
-    pub fn decode_until(
-        reader: &mut Reader,
-        tag: &str,
-        expected_type: ValueType,
-    ) -> CodecResult<()> {
+    pub fn decode_until(reader: &mut Reader, tag: &str, expected_type: TdfType) -> CodecResult<()> {
         loop {
             let decoded = match Self::decode(reader) {
                 Ok(tag) => tag,
@@ -50,7 +46,7 @@ impl Tag {
     /// `reader`        The reader to read from
     /// `tag`       	The tag name to read until
     /// `expected_type` The expected type of the tag
-    pub fn try_decode_until(reader: &mut Reader, tag: &str, expected_type: ValueType) -> bool {
+    pub fn try_decode_until(reader: &mut Reader, tag: &str, expected_type: TdfType) -> bool {
         reader.mark();
         while let Ok(decoded) = Self::decode(reader) {
             if decoded.0.ne(tag) {
@@ -144,20 +140,20 @@ impl Tag {
         reader: &mut Reader,
         out: &mut String,
         indent: usize,
-        ty: &ValueType,
+        ty: &TdfType,
     ) -> CodecResult<()> {
         match ty {
-            ValueType::VarInt => {
+            TdfType::VarInt => {
                 let value = u64::decode(reader)?;
                 out.push_str(&value.to_string());
             }
-            ValueType::String => {
+            TdfType::String => {
                 let value = String::decode(reader)?;
                 out.push('"');
                 out.push_str(&value);
                 out.push('"');
             }
-            ValueType::Blob => {
+            TdfType::Blob => {
                 let value = Blob::decode(reader)?;
                 out.push_str("Blob[");
                 for b in value.0 {
@@ -165,7 +161,7 @@ impl Tag {
                 }
                 out.push(']');
             }
-            ValueType::Group => {
+            TdfType::Group => {
                 out.push_str("{\n");
                 let mut is_two = false;
                 loop {
@@ -186,12 +182,12 @@ impl Tag {
                     out.push_str(" (2)");
                 }
             }
-            ValueType::List => {
-                let value_type = ValueType::decode(reader)?;
+            TdfType::List => {
+                let value_type = TdfType::decode(reader)?;
                 let length = usize::decode(reader)?;
 
                 let nl = match value_type {
-                    ValueType::Map | ValueType::Group => true,
+                    TdfType::Map | TdfType::Group => true,
                     _ => false,
                 };
 
@@ -221,9 +217,9 @@ impl Tag {
                 }
                 out.push(']');
             }
-            ValueType::Map => {
-                let key_type = ValueType::decode(reader)?;
-                let value_type = ValueType::decode(reader)?;
+            TdfType::Map => {
+                let key_type = TdfType::decode(reader)?;
+                let value_type = TdfType::decode(reader)?;
                 let length = usize::decode(reader)?;
                 out.push_str(&format!("Map<{:?}, {:?}> ", key_type, value_type));
                 out.push_str("{\n");
@@ -243,7 +239,7 @@ impl Tag {
                 out.push_str(&"  ".repeat(indent));
                 out.push('}');
             }
-            ValueType::Union => {
+            TdfType::Union => {
                 let ty = reader.take_one()?;
                 if ty != UNION_UNSET {
                     out.push_str("Union(");
@@ -255,7 +251,7 @@ impl Tag {
                     out.push_str("Union(Unset)");
                 }
             }
-            ValueType::VarIntList => {
+            TdfType::VarIntList => {
                 let value = VarIntList::<usize>::decode(reader)?.0;
                 out.push_str("VarList[");
                 let length = value.len();
@@ -268,19 +264,19 @@ impl Tag {
                 }
                 out.push(']');
             }
-            ValueType::Pair => {
+            TdfType::Pair => {
                 let pair = <(usize, usize)>::decode(reader)?;
                 out.push_str(&format!("({}, {})", &pair.0, &pair.1));
             }
-            ValueType::Triple => {
+            TdfType::Triple => {
                 let value = <(usize, usize, usize)>::decode(reader)?;
                 out.push_str(&format!("({}, {}, {})", &value.0, &value.1, &value.2));
             }
-            ValueType::Float => {
+            TdfType::Float => {
                 let value = f32::decode(reader)?;
                 out.push_str(&value.to_string());
             }
-            ValueType::Unknown(_) => return Err(CodecError::Other("Unknown tag type")),
+            TdfType::Unknown(_) => return Err(CodecError::Other("Unknown tag type")),
         }
         Ok(())
     }
@@ -292,39 +288,39 @@ impl Tag {
     }
 
     /// Discards the provided type of value
-    pub fn discard_type(ty: &ValueType, reader: &mut Reader) -> CodecResult<()> {
+    pub fn discard_type(ty: &TdfType, reader: &mut Reader) -> CodecResult<()> {
         match ty {
-            ValueType::VarInt => usize::skip(reader)?,
-            ValueType::String => String::skip(reader)?,
-            ValueType::Blob => <Vec<u8>>::skip(reader)?,
-            ValueType::Group => Self::discard_group(reader)?,
-            ValueType::List => {
-                let new_ty = ValueType::decode(reader)?;
+            TdfType::VarInt => usize::skip(reader)?,
+            TdfType::String => String::skip(reader)?,
+            TdfType::Blob => <Vec<u8>>::skip(reader)?,
+            TdfType::Group => Self::discard_group(reader)?,
+            TdfType::List => {
+                let new_ty = TdfType::decode(reader)?;
                 let length = usize::decode(reader)?;
                 for _ in 0..length {
                     Self::discard_type(&new_ty, reader)?;
                 }
             }
-            ValueType::Map => {
-                let key_ty = ValueType::decode(reader)?;
-                let value_ty = ValueType::decode(reader)?;
+            TdfType::Map => {
+                let key_ty = TdfType::decode(reader)?;
+                let value_ty = TdfType::decode(reader)?;
                 let length = usize::decode(reader)?;
                 for _ in 0..length {
                     Self::discard_type(&key_ty, reader)?;
                     Self::discard_type(&value_ty, reader)?;
                 }
             }
-            ValueType::Union => {
+            TdfType::Union => {
                 let ty = reader.take_one()?;
                 if ty != UNION_UNSET {
                     Self::discard_tag(reader)?;
                 }
             }
-            ValueType::VarIntList => VarIntList::<usize>::skip(reader)?,
-            ValueType::Pair => <(usize, usize)>::skip(reader)?,
-            ValueType::Triple => <(usize, usize, usize)>::skip(reader)?,
-            ValueType::Float => f32::skip(reader)?,
-            ValueType::Unknown(_) => {}
+            TdfType::VarIntList => VarIntList::<usize>::skip(reader)?,
+            TdfType::Pair => <(usize, usize)>::skip(reader)?,
+            TdfType::Triple => <(usize, usize, usize)>::skip(reader)?,
+            TdfType::Float => f32::skip(reader)?,
+            TdfType::Unknown(_) => {}
         };
         Ok(())
     }
@@ -343,7 +339,7 @@ impl Tag {
     }
 
     /// Encodes a tag directly using the provided values
-    pub fn encode_from(tag: &str, value_type: &ValueType, output: &mut Vec<u8>) {
+    pub fn encode_from(tag: &str, value_type: &TdfType, output: &mut Vec<u8>) {
         Self::encode_tag(tag, output);
         value_type.encode(output);
     }
@@ -381,18 +377,20 @@ impl Tag {
     }
 }
 
-impl Codec for Tag {
+impl Encodable for Tag {
     fn encode(&self, output: &mut Vec<u8>) {
         Tag::encode_from(&self.0, &self.1, output);
     }
+}
 
+impl Decodable for Tag {
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
         let tag: &[u8; 4] = reader
             .take(4)?
             .try_into()
             .map_err(|_| CodecError::UnknownError)?;
 
-        let value_type = ValueType::from_value(tag[3]);
+        let value_type = TdfType::from_value(tag[3]);
         let mut output: [u8; 4] = [0, 0, 0, 0];
 
         output[0] |= (tag[0] & 0x80) >> 1;
@@ -425,7 +423,7 @@ impl Codec for Tag {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ValueType {
+pub enum TdfType {
     VarInt,
     String,
     Blob,
@@ -440,61 +438,63 @@ pub enum ValueType {
     Unknown(u8),
 }
 
-impl Codec for ValueType {
+impl Encodable for TdfType {
     fn encode(&self, output: &mut Vec<u8>) {
         output.push(self.value());
     }
+}
 
+impl Decodable for TdfType {
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        reader.take_one().map(ValueType::from_value)
+        reader.take_one().map(TdfType::from_value)
     }
 }
 
-impl ValueType {
+impl TdfType {
     pub fn value(&self) -> u8 {
         match self {
-            ValueType::VarInt => 0x0,
-            ValueType::String => 0x1,
-            ValueType::Blob => 0x2,
-            ValueType::Group => 0x3,
-            ValueType::List => 0x4,
-            ValueType::Map => 0x5,
-            ValueType::Union => 0x6,
-            ValueType::VarIntList => 0x7,
-            ValueType::Pair => 0x8,
-            ValueType::Triple => 0x9,
-            ValueType::Float => 0xA,
-            ValueType::Unknown(value) => *value,
+            TdfType::VarInt => 0x0,
+            TdfType::String => 0x1,
+            TdfType::Blob => 0x2,
+            TdfType::Group => 0x3,
+            TdfType::List => 0x4,
+            TdfType::Map => 0x5,
+            TdfType::Union => 0x6,
+            TdfType::VarIntList => 0x7,
+            TdfType::Pair => 0x8,
+            TdfType::Triple => 0x9,
+            TdfType::Float => 0xA,
+            TdfType::Unknown(value) => *value,
         }
     }
 
-    pub fn from_value(value: u8) -> ValueType {
+    pub fn from_value(value: u8) -> TdfType {
         match value {
-            0x0 => ValueType::VarInt,
-            0x1 => ValueType::String,
-            0x2 => ValueType::Blob,
-            0x3 => ValueType::Group,
-            0x4 => ValueType::List,
-            0x5 => ValueType::Map,
-            0x6 => ValueType::Union,
-            0x7 => ValueType::VarIntList,
-            0x8 => ValueType::Pair,
-            0x9 => ValueType::Triple,
-            0xA => ValueType::Float,
-            value => ValueType::Unknown(value),
+            0x0 => TdfType::VarInt,
+            0x1 => TdfType::String,
+            0x2 => TdfType::Blob,
+            0x3 => TdfType::Group,
+            0x4 => TdfType::List,
+            0x5 => TdfType::Map,
+            0x6 => TdfType::Union,
+            0x7 => TdfType::VarIntList,
+            0x8 => TdfType::Pair,
+            0x9 => TdfType::Triple,
+            0xA => TdfType::Float,
+            value => TdfType::Unknown(value),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::codec::{Codec, Reader};
-    use crate::tag::{Tag, ValueType};
+    use crate::codec::Reader;
+    use crate::tag::{Tag, TdfType};
 
     #[test]
     fn test_read_write() {
         let mut out = Vec::new();
-        let tag_in = Tag(String::from("TEST"), ValueType::String);
+        let tag_in = Tag(String::from("TEST"), TdfType::String);
         tag_in.encode(&mut out);
         let mut reader = Reader::new(&out);
         let tag = Tag::decode(&mut reader).unwrap();
@@ -503,7 +503,7 @@ mod test {
 
     #[test]
     fn test_tag() {
-        let tag_out = Tag(String::from("PORT"), ValueType::VarInt);
+        let tag_out = Tag(String::from("PORT"), TdfType::VarInt);
         let mut out = Vec::new();
         tag_out.encode(&mut out);
         println!("{out:?}")

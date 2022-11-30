@@ -1,6 +1,8 @@
-use crate::codec::{Codec, CodecError, CodecResult, Reader};
+use crate::codec::{
+    Codec, CodecError, CodecResult, Decodable, Encodable, Reader, TdfType, ValueType,
+};
 
-use crate::tag::{Tag, ValueType};
+use crate::tag::{Tag, TdfType};
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -61,12 +63,12 @@ impl<T: VarInt> VarIntList<T> {
 /// Type that can be unset or contain a pair of key
 /// values
 #[derive(Debug, PartialEq, Eq)]
-pub enum Union<C: Codec> {
+pub enum Union<C> {
     Set { key: u8, tag: String, value: C },
     Unset,
 }
 
-impl<T: Codec> Union<T> {
+impl<C> Union<C> {
     /// Creates a new union with a unset value
     pub fn unset() -> Self {
         Self::Unset
@@ -74,7 +76,7 @@ impl<T: Codec> Union<T> {
 
     /// Creates a new set union value with the provided
     /// key tag and value
-    pub fn set(key: u8, tag: &str, value: T) -> Self {
+    pub fn set(key: u8, tag: &str, value: C) -> Self {
         Self::Set {
             key,
             tag: tag.to_owned(),
@@ -91,20 +93,44 @@ impl<T: Codec> Union<T> {
     pub fn is_unset(&self) -> bool {
         matches!(self, Self::Unset)
     }
+
+    pub fn unwrap(self) -> C {
+        match self {
+            Self::Unset => panic!("Attempted to unwrap union with no value"),
+            Self::Set { value, .. } => value,
+        }
+    }
 }
 
-impl<T: Codec> Codec for Union<T> {
+impl<C> Into<Option<C>> for Union<C> {
+    fn into(self) -> Option<C> {
+        match self {
+            Self::Set { value, .. } => Some(value),
+            Self::Unset => None,
+        }
+    }
+}
+
+impl<C> Encodable for Union<C>
+where
+    C: Encodable + ValueType,
+{
     fn encode(&self, output: &mut Vec<u8>) {
         match self {
             Union::Set { key, tag, value } => {
                 output.push(*key);
-                Tag::encode_from(tag, &T::value_type(), output);
+                Tag::encode_from(tag, &C::value_type(), output);
                 value.encode(output);
             }
             Union::Unset => output.push(UNION_UNSET),
         }
     }
+}
 
+impl<C> Decodable for Union<C>
+where
+    C: Decodable + ValueType,
+{
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
         let key = reader.take_one()?;
         if key == UNION_UNSET {
@@ -124,13 +150,11 @@ impl<T: Codec> Codec for Union<T> {
             value,
         })
     }
-
-    fn value_type() -> ValueType {
-        ValueType::Union
-    }
 }
 
 pub const UNION_UNSET: u8 = 0x7F;
+
+pub trait VarInt: PartialEq + Eq + Debug + Encodable + Decodable {}
 
 pub trait VarInt: PartialEq + Eq + Debug + Codec {}
 
@@ -205,8 +229,8 @@ impl<K: MapKey, V: Codec> Codec for TdfMap<K, V> {
         let expected_key = K::value_type();
         let expected_value = V::value_type();
 
-        let key_type = ValueType::decode(reader)?;
-        let value_type = ValueType::decode(reader)?;
+        let key_type = TdfType::decode(reader)?;
+        let value_type = TdfType::decode(reader)?;
 
         if expected_key != key_type {
             return Err(CodecError::UnexpectedType(expected_key, key_type));
@@ -228,8 +252,8 @@ impl<K: MapKey, V: Codec> Codec for TdfMap<K, V> {
         Ok(map)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::Map
+    fn value_type() -> TdfType {
+        TdfType::Map
     }
 }
 
@@ -507,8 +531,8 @@ impl Codec for bool {
         Ok(byte == 1)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -576,8 +600,8 @@ impl Codec for u8 {
         Ok(result)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -590,8 +614,8 @@ impl Codec for i8 {
         Ok(u8::decode(reader)? as i8)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -615,8 +639,8 @@ impl Codec for u16 {
         impl_decode_var!(u16, reader)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -629,8 +653,8 @@ impl Codec for i16 {
         impl_decode_var!(i16, reader)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -644,8 +668,8 @@ impl Codec for u32 {
         impl_decode_var!(u32, reader)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -659,8 +683,8 @@ impl Codec for i32 {
         impl_decode_var!(i32, reader)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -674,8 +698,8 @@ impl Codec for u64 {
         impl_decode_var!(u64, reader)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -700,8 +724,8 @@ impl Codec for usize {
         impl_decode_var!(usize, reader)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -715,8 +739,8 @@ impl Codec for isize {
         impl_decode_var!(isize, reader)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarInt
+    fn value_type() -> TdfType {
+        TdfType::VarInt
     }
 }
 
@@ -745,8 +769,8 @@ impl Codec for &'_ str {
         ))
     }
 
-    fn value_type() -> ValueType {
-        ValueType::String
+    fn value_type() -> TdfType {
+        TdfType::String
     }
 }
 
@@ -765,8 +789,8 @@ impl Codec for String {
         Ok(text)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::String
+    fn value_type() -> TdfType {
+        TdfType::String
     }
 }
 
@@ -791,8 +815,8 @@ impl Codec for Blob {
         Ok(Blob(bytes.to_vec()))
     }
 
-    fn value_type() -> ValueType {
-        ValueType::Blob
+    fn value_type() -> TdfType {
+        TdfType::Blob
     }
 }
 
@@ -806,7 +830,7 @@ impl<T: Codec> Codec for Vec<T> {
     }
 
     fn decode(reader: &mut Reader) -> CodecResult<Self> {
-        let value_type = ValueType::decode(reader)?;
+        let value_type = TdfType::decode(reader)?;
         let expected_type = T::value_type();
         if value_type != expected_type {
             return Err(CodecError::UnexpectedType(value_type, expected_type));
@@ -819,8 +843,8 @@ impl<T: Codec> Codec for Vec<T> {
         Ok(out)
     }
 
-    fn value_type() -> ValueType {
-        ValueType::List
+    fn value_type() -> TdfType {
+        TdfType::List
     }
 }
 
@@ -841,8 +865,8 @@ impl<T: VarInt> Codec for VarIntList<T> {
         Ok(VarIntList(out))
     }
 
-    fn value_type() -> ValueType {
-        ValueType::VarIntList
+    fn value_type() -> TdfType {
+        TdfType::VarIntList
     }
 }
 
@@ -858,8 +882,8 @@ impl<A: VarInt, B: VarInt> Codec for (A, B) {
         Ok((a, b))
     }
 
-    fn value_type() -> ValueType {
-        ValueType::Pair
+    fn value_type() -> TdfType {
+        TdfType::Pair
     }
 }
 
@@ -877,8 +901,8 @@ impl<A: VarInt, B: VarInt, C: VarInt> Codec for (A, B, C) {
         Ok((a, b, c))
     }
 
-    fn value_type() -> ValueType {
-        ValueType::Triple
+    fn value_type() -> TdfType {
+        TdfType::Triple
     }
 }
 

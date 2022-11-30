@@ -1,7 +1,7 @@
-use crate::tag::ValueType;
+use crate::tag::TdfType;
 use std::{
     fmt::{Debug, Formatter},
-    io,
+    io::{self, Read},
 };
 
 /// Structure for reading over a vec
@@ -85,9 +85,8 @@ impl<'a> Reader<'a> {
 /// Errors for when decoding packet structures
 pub enum CodecError {
     MissingField(String),
-    DecodeFail(&'static str, Box<CodecError>),
-    UnexpectedType(ValueType, ValueType),
-    UnexpectedFieldType(String, ValueType, ValueType),
+    UnexpectedType(TdfType, TdfType),
+    UnexpectedFieldType(String, TdfType, TdfType),
     NotEnoughBytes(usize, usize, usize),
     UnknownError,
     InvalidAction(&'static str),
@@ -98,9 +97,7 @@ impl Debug for CodecError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             CodecError::MissingField(field) => write!(f, "Missing field {field}"),
-            CodecError::DecodeFail(field, err) => {
-                write!(f, "Unable to decode field {}: {:?}", field, err)
-            }
+
             CodecError::UnexpectedType(expected, got) => {
                 write!(
                     f,
@@ -135,35 +132,33 @@ impl Debug for CodecError {
 
 pub type CodecResult<T> = Result<T, CodecError>;
 
-/// Trait for implementing things that can be decoded from
-/// a Reader and encoded to a byte Vec
-pub trait Codec: Sized {
-    /// Function for implementing encoding of Self to the
-    /// provided vec of bytes
-    fn encode(&self, _output: &mut Vec<u8>) {}
-
+pub trait Decodable: Sized {
     /// Function for implementing decoding of Self from
     /// the provided Reader. Will return None if self
     /// cannot be decoded
-    fn decode(_reader: &mut Reader) -> CodecResult<Self> {
-        Err(CodecError::InvalidAction(
-            "Not allowed to decode this codec type",
-        ))
-    }
+    ///
+    /// `reader` The reader to decode from
+    fn decode(reader: &mut Reader) -> CodecResult<Self>;
 
     /// Function to provide functionality for skipping this
     /// data type (e.g. read the bytes without using them)
+    ///
+    /// Default implementation reads discarding the value.
+    /// Other implementations should implement a more
+    /// performant version
+    ///
+    /// `reader` The reader to skip with
     fn skip(reader: &mut Reader) -> CodecResult<()> {
-        Self::decode(reader)?;
-        Ok(())
+        let _ = Self::decode(reader)?;
     }
+}
 
-    /// Optional additional specifier for Tdf types that
-    /// tells which type this is
-    #[inline]
-    fn value_type() -> ValueType {
-        ValueType::Unknown(0)
-    }
+pub trait Encodable: Sized {
+    /// Function for implementing encoding of Self to the
+    /// provided vec of bytes
+    ///
+    /// `output` The output to decode to
+    fn encode(&self, output: &mut Vec<u8>);
 
     /// Shortcut function for encoding self directly to
     /// a Vec of bytes
@@ -172,6 +167,11 @@ pub trait Codec: Sized {
         self.encode(&mut output);
         output
     }
+}
+
+pub trait ValueType {
+    /// The type of tdf value this is
+    fn value_type() -> TdfType;
 }
 
 /// Attempts to decode a u16 value from the provided slice
