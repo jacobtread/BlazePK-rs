@@ -45,6 +45,9 @@ pub enum DecodeError {
         /// The remaining bytes in the reader slice
         remaining: usize,
     },
+
+    /// Other error type with custom message
+    Other(&'static str),
 }
 
 /// Type alias for result which could result in a Decode Error
