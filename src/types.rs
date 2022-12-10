@@ -13,6 +13,12 @@ use std::slice::Iter;
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarIntList<T>(pub Vec<T>);
 
+impl<T> Default for VarIntList<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T> VarIntList<T> {
     /// Creates a new VarIntList
     pub fn new() -> Self {
@@ -25,8 +31,7 @@ impl<T> VarIntList<T> {
     }
 
     pub fn only(value: T) -> Self {
-        let mut values = Vec::with_capacity(1);
-        values.push(value);
+        let values = vec![value];
         Self(values)
     }
 
@@ -132,11 +137,11 @@ impl<C> Union<C> {
     }
 }
 
-impl<C> Into<Option<C>> for Union<C> {
-    fn into(self) -> Option<C> {
-        match self {
-            Self::Set { value, .. } => Some(value),
-            Self::Unset => None,
+impl<C> From<Union<C>> for Option<C> {
+    fn from(value: Union<C>) -> Self {
+        match value {
+            Union::Set { value, .. } => Some(value),
+            Union::Unset => None,
         }
     }
 }
@@ -236,7 +241,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("TdfMap {")?;
         for (key, value) in self.iter() {
-            write!(f, "  \"{key:?}\": \"{value:?}\"\n")?;
+            writeln!(f, "  \"{key:?}\": \"{value:?}\"")?;
         }
         f.write_str("}")
     }
@@ -266,9 +271,14 @@ impl<K, V> TdfMap<K, V> {
         self.keys.len()
     }
 
+    /// Returns if the underlying lists are empty
+    pub fn is_empty(&self) -> bool {
+        self.keys.is_empty()
+    }
+
     /// Creates a new iterator over the underlying items
     /// in the map
-    pub fn iter<'a>(&'a self) -> TdfMapIter<'a, K, V> {
+    pub fn iter(&self) -> TdfMapIter<'_, K, V> {
         TdfMapIter {
             map: self,
             index: 0,
@@ -277,7 +287,7 @@ impl<K, V> TdfMap<K, V> {
 
     /// Returns the key and value stored at the provided index
     /// will return None if there is nothing at the provided index
-    pub fn index<'a>(&'a self, index: usize) -> Option<(&'a K, &'a V)> {
+    pub fn index(&self, index: usize) -> Option<(&'_ K, &'_ V)> {
         let key = self.keys.get(index)?;
         let value = self.values.get(index)?;
         Some((key, value))

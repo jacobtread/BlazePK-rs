@@ -334,8 +334,8 @@ impl TdfWriter {
     }
 }
 
-impl Into<Vec<u8>> for TdfWriter {
-    fn into(self) -> Vec<u8> {
-        self.buffer
+impl From<TdfWriter> for Vec<u8> {
+    fn from(value: TdfWriter) -> Self {
+        value.buffer
     }
 }

@@ -401,7 +401,7 @@ impl Packet {
     /// `contents` The response contents
     pub fn error<C: Encodable>(packet: &Packet, error: u16, contents: C) -> Self {
         Self {
-            header: packet.header.with_error(error.into()),
+            header: packet.header.with_error(error),
             contents: Bytes::from(contents.encode_bytes()),
         }
     }
@@ -425,7 +425,7 @@ impl Packet {
     /// `contents` The raw encoded contents
     pub fn error_raw(packet: &Packet, error: u16, contents: Vec<u8>) -> Self {
         Self {
-            header: packet.header.with_error(error.into()),
+            header: packet.header.with_error(error),
             contents: Bytes::from(contents),
         }
     }
@@ -438,7 +438,7 @@ impl Packet {
     #[inline]
     pub fn error_empty(packet: &Packet, error: u16) -> Packet {
         Self {
-            header: packet.header.with_error(error.into()),
+            header: packet.header.with_error(error),
             contents: Bytes::new(),
         }
     }

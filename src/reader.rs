@@ -117,6 +117,11 @@ impl<'a> TdfReader<'a> {
         self.buffer.len() - self.cursor
     }
 
+    /// Returns if there is nothing left after the cursor
+    pub fn is_empty(&self) -> bool {
+        self.cursor >= self.buffer.len()
+    }
+
     /// Decodes a u8 value using the VarInt encoding
     pub fn read_u8(&mut self) -> DecodeResult<u8> {
         let first: u8 = self.read_byte()?;
@@ -185,10 +190,7 @@ impl<'a> TdfReader<'a> {
     /// Reads a boolean value this is encoded using the
     /// var int encoding
     pub fn read_bool(&mut self) -> DecodeResult<bool> {
-        Ok(match self.read_u8()? {
-            1 => true,
-            _ => false,
-        })
+        Ok(matches!(self.read_u8()?, 1))
     }
 
     /// Reads a map from the underlying buffer
@@ -257,7 +259,7 @@ impl<'a> TdfReader<'a> {
                 Err(DecodeError::UnexpectedEof { .. }) => {
                     return Err(DecodeError::MissingTag {
                         tag: tag.to_string(),
-                        ty: ty,
+                        ty,
                     })
                 }
                 Err(err) => return Err(err),
@@ -313,7 +315,7 @@ impl<'a> TdfReader<'a> {
     ///
     /// `tag` The tag name to read
     pub fn tag<C: Decodable + ValueType>(&mut self, tag: &str) -> DecodeResult<C> {
-        let _ = self.until_tag(tag, C::value_type())?;
+        self.until_tag(tag, C::value_type())?;
         C::decode(self)
     }
 
@@ -543,8 +545,8 @@ impl<'a> TdfReader<'a> {
                 let value = self.read_blob()?;
                 let length = value.len();
                 out.push_str("Blob [");
-                for i in 0..length {
-                    out.push_str(&format!("0x{:X}", value[i]));
+                for (i, value) in value.iter().enumerate() {
+                    out.push_str(&format!("0x{:X}", value));
                     if i < length - 1 {
                         out.push_str(", ");
                     }
@@ -625,7 +627,7 @@ impl<'a> TdfReader<'a> {
                     let tag = self.read_tag()?;
                     out.push_str(&format!("Union(\"{}\", {}, ", &tag.0, ty));
                     self.stringify_type(out, indent + 1, &tag.1)?;
-                    out.push_str(")")
+                    out.push(')')
                 }
             }
             TdfType::VarIntList => {
@@ -662,7 +664,7 @@ impl<'a> TdfReader<'a> {
     }
 
     pub fn until_list(&mut self, tag: &str, value_type: TdfType) -> DecodeResult<usize> {
-        let _ = self.until_tag(tag, TdfType::List)?;
+        self.until_tag(tag, TdfType::List)?;
         let list_type = self.read_type()?;
         if list_type != value_type {
             return Err(DecodeError::InvalidType {
@@ -679,7 +681,7 @@ impl<'a> TdfReader<'a> {
         key_type: TdfType,
         value_type: TdfType,
     ) -> DecodeResult<usize> {
-        let _ = self.until_tag(tag, TdfType::Map)?;
+        self.until_tag(tag, TdfType::Map)?;
 
         let k_type = self.read_type()?;
         let v_type = self.read_type()?;
