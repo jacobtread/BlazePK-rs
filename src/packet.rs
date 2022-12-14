@@ -82,6 +82,8 @@ impl PacketType {
     }
 
     /// Gets the packet type this value is represented by
+    ///
+    /// `value` The value to get the type for
     pub fn from_value(value: u16) -> PacketType {
         match value {
             0x0000 => PacketType::Request,
@@ -643,6 +645,8 @@ impl Packet {
 
     /// Reads a packet from the provided input without parsing
     /// the contents of the packet
+    ///
+    /// `input` The input source to read from
     #[cfg(feature = "async")]
     pub async fn read_async_typed<T: PacketComponents, R: AsyncRead + Unpin>(
         input: &mut R,
@@ -665,6 +669,8 @@ impl Packet {
 
     /// Reads a packet from the provided input without parsing
     /// the contents of the packet
+    ///
+    /// `input` The input source to read from
     #[cfg(feature = "blaze-ssl")]
     pub async fn read_blaze_typed<T: PacketComponents, R: AsyncRead + AsyncWrite + Unpin>(
         input: &mut BlazeStream<R>,
@@ -687,6 +693,8 @@ impl Packet {
 
     /// Handles writing the header and contents of this packet to
     /// the Writable object
+    ///
+    /// `output` The output source to write to
     #[cfg(feature = "sync")]
     pub fn write<W: Write>(&self, output: &mut W) -> io::Result<()>
     where
@@ -701,6 +709,8 @@ impl Packet {
 
     /// Handles writing the header and contents of this packet to
     /// the Writable object
+    ///
+    /// `output` The output source to write to
     #[cfg(feature = "async")]
     pub async fn write_async<W: AsyncWrite + Unpin>(&self, output: &mut W) -> io::Result<()>
     where
@@ -715,6 +725,8 @@ impl Packet {
 
     /// Handles writing the header and contents of this packet to
     /// the Writable object
+    ///
+    /// `output` The output source to write to
     #[cfg(feature = "blaze-ssl")]
     pub fn write_blaze<W: AsyncRead + AsyncWrite + Unpin>(
         &self,
@@ -732,6 +744,8 @@ impl Packet {
 
     /// Appends the header and contents of this packet to the provided output
     /// Vec of bytes.
+    ///
+    /// `output` The output vec to append the bytes to
     pub fn write_bytes(&self, output: &mut Vec<u8>) {
         let content = &self.contents;
         let length = content.len();
