@@ -114,7 +114,7 @@ impl PacketHeader {
     ///
     /// `component` The component to use
     /// `command`   The command to use
-    pub fn notify(component: u16, command: u16) -> Self {
+    pub const fn notify(component: u16, command: u16) -> Self {
         Self {
             component,
             command,
@@ -130,7 +130,7 @@ impl PacketHeader {
     /// `id`        The packet ID
     /// `component` The component to use
     /// `command`   The command to use
-    pub fn request(id: u16, component: u16, command: u16) -> Self {
+    pub const fn request(id: u16, component: u16, command: u16) -> Self {
         Self {
             component,
             command,
@@ -143,14 +143,14 @@ impl PacketHeader {
     /// Creates a response to the provided packet header by
     /// changing the type of the header
     #[inline]
-    pub fn response(&self) -> Self {
+    pub const fn response(&self) -> Self {
         self.with_type(PacketType::Response)
     }
 
     /// Copies the header contents changing its Packet Type
     ///
     /// `ty` The new packet type
-    pub fn with_type(&self, ty: PacketType) -> Self {
+    pub const fn with_type(&self, ty: PacketType) -> Self {
         Self {
             component: self.component,
             command: self.command,
@@ -161,7 +161,7 @@ impl PacketHeader {
     }
 
     /// Copies the header contents changing its Packet Type
-    pub fn with_error(&self, error: u16) -> Self {
+    pub const fn with_error(&self, error: u16) -> Self {
         Self {
             component: self.component,
             command: self.command,
@@ -319,10 +319,15 @@ impl PacketHeader {
 }
 
 /// Structure for Blaze packets contains the contents of the packet
-/// and the header for identification
+/// and the header for identification.
+///
+/// Packets can be cloned with little memory usage increase because
+/// the content is stored as Bytes.
 #[derive(Debug, Clone)]
 pub struct Packet {
+    /// The packet header
     pub header: PacketHeader,
+    /// The packet encoded byte contents
     pub contents: Bytes,
 }
 
@@ -342,7 +347,7 @@ impl Packet {
     /// where the contents are empty
     ///
     /// `header` The packet header
-    pub fn raw_empty(header: PacketHeader) -> Self {
+    pub const fn raw_empty(header: PacketHeader) -> Self {
         Self {
             header,
             contents: Bytes::new(),
@@ -389,7 +394,7 @@ impl Packet {
     /// but with empty contents.
     ///
     /// `packet` The packet to respond to
-    pub fn response_empty(packet: &Packet) -> Self {
+    pub const fn response_empty(packet: &Packet) -> Self {
         Self {
             header: packet.header.response(),
             contents: Bytes::new(),
@@ -402,7 +407,7 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
     #[inline]
-    pub fn respond_empty(&self) -> Self {
+    pub const fn respond_empty(&self) -> Self {
         Self::response_empty(self)
     }
 
@@ -449,7 +454,7 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     #[inline]
-    pub fn error_empty(packet: &Packet, error: u16) -> Packet {
+    pub const fn error_empty(packet: &Packet, error: u16) -> Packet {
         Self {
             header: packet.header.with_error(error),
             contents: Bytes::new(),
@@ -462,7 +467,7 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     #[inline]
-    pub fn respond_error_empty(&self, error: u16) -> Packet {
+    pub const fn respond_error_empty(&self, error: u16) -> Packet {
         Self::error_empty(self, error)
     }
 
