@@ -814,6 +814,7 @@ mod test {
         }
     }
 
+    /// Tests writing all the different u8 values
     #[test]
     fn test_write_u8() {
         let mut writer = TdfWriter::default();

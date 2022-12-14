@@ -474,6 +474,8 @@ impl<'a> TdfReader<'a> {
     }
 
     /// Skips a data type
+    ///
+    /// `ty` The type of data to skip
     pub fn skip_type(&mut self, ty: &TdfType) -> DecodeResult<()> {
         match ty {
             TdfType::VarInt => self.skip_var_int(),
@@ -497,6 +499,10 @@ impl<'a> TdfReader<'a> {
         Ok(())
     }
 
+    /// Decodes all the contents within the reader into a string
+    /// representation
+    ///
+    /// `out` The string output to append to
     pub fn stringify(&mut self, out: &mut String) -> DecodeResult<()> {
         while self.cursor < self.buffer.len() {
             if let Err(err) = self.stringify_tag(out, 1) {
@@ -511,6 +517,11 @@ impl<'a> TdfReader<'a> {
         Ok(())
     }
 
+    /// Decodes and converts the next tag into
+    /// a string representation
+    ///
+    /// `out`    The string output to append to
+    /// `indent` The current indent level
     pub fn stringify_tag(&mut self, out: &mut String, indent: usize) -> DecodeResult<()> {
         let tag = self.read_tag()?;
         out.push_str(&"  ".repeat(indent));
@@ -527,6 +538,12 @@ impl<'a> TdfReader<'a> {
         }
     }
 
+    /// Decodes and converts the next value of the provided type
+    /// into a string representation
+    ///
+    /// `out`    The string output to append to
+    /// `indent` The current indent level
+    /// `ty`     The type
     pub fn stringify_type(
         &mut self,
         out: &mut String,
@@ -666,6 +683,12 @@ impl<'a> TdfReader<'a> {
         Ok(())
     }
 
+    /// Reads until the next list values selection for the provided
+    /// tag. Will read the value type and the length returning
+    /// the length.
+    ///
+    /// `tag`        The tag to read
+    /// `value_type` The expected value type
     pub fn until_list(&mut self, tag: &str, value_type: TdfType) -> DecodeResult<usize> {
         self.until_tag(tag, TdfType::List)?;
         let list_type = self.read_type()?;
@@ -678,6 +701,14 @@ impl<'a> TdfReader<'a> {
         let count = self.read_usize()?;
         Ok(count)
     }
+
+    /// Reads until the next map values selection for the provided
+    /// tag. Will read the key value types and the length returning
+    /// the length.
+    ///
+    /// `tag`        The tag to read
+    /// `key_type`   The expected key type
+    /// `value_type` The expected value type
     pub fn until_map(
         &mut self,
         tag: &str,
@@ -708,5 +739,19 @@ impl<'a> TdfReader<'a> {
     }
 }
 
+/// Majority of reading tests are merged into the writing tests
 #[cfg(test)]
-mod test {}
+mod test {
+    use super::TdfReader;
+
+    /// Tests reading a byte from the reader
+    #[test]
+    fn test_read_byte() {
+        for value in 0..255 {
+            let buffer = &[value];
+            let mut reader = TdfReader::new(buffer);
+            let read_value = reader.read_byte().unwrap();
+            assert_eq!(value, read_value);
+        }
+    }
+}
