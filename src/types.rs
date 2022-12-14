@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::slice::Iter;
 
+/// List of Var ints
 #[derive(Debug, PartialEq, Eq)]
 pub struct VarIntList<T>(pub Vec<T>);
 
@@ -29,24 +30,25 @@ impl<T> VarIntList<T> {
         Self(Vec::with_capacity(0))
     }
 
-    pub fn only(value: T) -> Self {
-        let values = vec![value];
-        Self(values)
-    }
-
     /// Creates a new VarIntList with the provided
     /// capacity
+    ///
+    /// `capacity` The capacity for the underlying list
     pub fn with_capacity(capacity: usize) -> Self {
         Self(Vec::with_capacity(capacity))
     }
 
-    /// Inserts a new value into the underlying list
-    pub fn insert(&mut self, value: impl Into<T>) {
+    /// Pushes a new value into the underlying list
+    ///
+    /// `value` The value to push
+    pub fn push(&mut self, value: impl Into<T>) {
         self.0.push(value.into())
     }
 
     /// Removes the value at the provided index and returns
     /// the value stored at it if there is one
+    ///
+    /// `index` The index to remove
     pub fn remove(&mut self, index: usize) -> Option<T> {
         if index < self.0.len() {
             Some(self.0.remove(index))
@@ -57,6 +59,8 @@ impl<T> VarIntList<T> {
 
     /// Retrieves the value at the provided index returning
     /// a borrow if one is there
+    ///
+    /// `index` The index to get the value at
     pub fn get(&mut self, index: usize) -> Option<&T> {
         self.0.get(index)
     }
@@ -195,8 +199,10 @@ where
     }
 }
 
+/// Key value for unions that are unset
 pub const UNION_UNSET: u8 = 0x7F;
 
+/// Trait implemented by VarInt types
 pub trait VarInt: PartialEq + Eq + Debug + Encodable + Decodable {}
 
 /// Trait that must be implemented on a type for it to
@@ -207,6 +213,7 @@ impl MapKey for &'_ str {}
 impl MapKey for String {}
 impl<T: VarInt> MapKey for T {}
 
+/// Macro for implementing the var int trait in bulk easily
 macro_rules! impl_var_int {
     ($($ty:ty),*) => { $(impl VarInt for $ty {})* };
 }
@@ -842,11 +849,10 @@ impl<A, B, C> ValueType for Triple<A, B, C> {
 
 #[cfg(test)]
 mod test {
-    use crate::codec::{Decodable, Encodable};
-    use crate::reader::TdfReader;
-    use crate::types::TdfMap;
-    use crate::writer::TdfWriter;
 
+    use crate::types::TdfMap;
+
+    /// Tests ordering a map
     #[test]
     fn test_map_ord() {
         let mut map = TdfMap::<String, String>::new();
@@ -863,6 +869,7 @@ mod test {
         println!("{map:?}")
     }
 
+    /// Tests extending an existing map
     #[test]
     fn test_map_extend() {
         let mut mapa = TdfMap::<String, String>::new();
@@ -885,8 +892,9 @@ mod test {
         println!("{mapa:?}")
     }
 
+    /// Tests inserting into a map
     #[test]
-    fn test() {
+    fn test_map_insert() {
         let mut map = TdfMap::<String, String>::new();
         map.insert("Test", "Abc");
 
@@ -895,27 +903,5 @@ mod test {
         assert_eq!(value.unwrap(), "Abc");
 
         println!("{value:?}")
-    }
-
-    #[test]
-    fn test_u8() {
-        for value in u8::MIN..u8::MAX {
-            let mut out = TdfWriter { buffer: Vec::new() };
-            value.encode(&mut out);
-            let mut reader = TdfReader::new(&out.buffer);
-            let v2 = u8::decode(&mut reader).unwrap();
-            assert_eq!(value, v2)
-        }
-    }
-
-    #[test]
-    fn test_u16() {
-        for value in u16::MIN..u16::MAX {
-            let mut out = TdfWriter { buffer: Vec::new() };
-            value.encode(&mut out);
-            let mut reader = TdfReader::new(&out.buffer);
-            let v2 = u16::decode(&mut reader).unwrap();
-            assert_eq!(value, v2)
-        }
     }
 }

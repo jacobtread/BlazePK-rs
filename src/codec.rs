@@ -16,7 +16,7 @@ pub trait Encodable: Sized {
     /// Function for implementing encoding of Self to the
     /// provided vec of bytes
     ///
-    /// `output` The output to decode to
+    /// `writer` The output to encode to
     fn encode(&self, writer: &mut TdfWriter);
 
     /// Shortcut function for encoding self directly to
@@ -49,6 +49,8 @@ macro_rules! value_type {
 }
 
 /// Attempts to decode a u16 value from the provided slice
+///
+/// `value` The bytes slice to decode from
 pub fn decode_u16_be(value: &[u8]) -> io::Result<u16> {
     Ok(u16::from_be_bytes(value.try_into().map_err(|_| {
         io::Error::new(
@@ -60,6 +62,9 @@ pub fn decode_u16_be(value: &[u8]) -> io::Result<u16> {
 
 /// Encodes the provided u16 value to bytes and extends
 /// the output slice with the bytes
+///
+/// `value`  The value to encode
+/// `output` The output to append the bytes to
 pub fn encode_u16_be(value: &u16, output: &mut Vec<u8>) {
     let bytes = value.to_be_bytes();
     output.extend_from_slice(&bytes);

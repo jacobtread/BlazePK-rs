@@ -6,22 +6,36 @@ use std::fmt::Debug;
 #[derive(Debug, Eq, PartialEq)]
 pub struct Tag(pub String, pub TdfType);
 
+/// Types from the Blaze packet system which are used to describe
+/// what data needs to be decoded.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TdfType {
+    /// Variable length integer value
     VarInt,
+    /// Strings
     String,
+    /// List of bytes
     Blob,
+    /// Group of tags
     Group,
+    /// List of any of the previously mentioned
     List,
+    /// Map of TdfType to TdfType
     Map,
+    /// Union of value where with unset type
     Union,
+    /// List of variable length integers
     VarIntList,
+    /// Pair of two var int values
     Pair,
+    /// Three var int values
     Triple,
+    /// f32 value
     Float,
 }
 
 impl TdfType {
+    /// Returns the mapped byte value for the type
     pub fn value(&self) -> u8 {
         match self {
             TdfType::VarInt => 0x0,
@@ -38,6 +52,10 @@ impl TdfType {
         }
     }
 
+    /// Converts the byte value to its actual type returning
+    /// an error if the type was unknown
+    ///
+    /// `value` The value to convert
     pub fn from_value(value: u8) -> DecodeResult<TdfType> {
         Ok(match value {
             0x0 => TdfType::VarInt,
