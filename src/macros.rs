@@ -6,7 +6,11 @@
 ///    Authentication (0x00) {
 ///        Key (0x00)
 ///        Alert (0x02)
-///        Value (0x23)
+///        Value (0x23);
+///
+///        notify {
+///          TestNotify (0x02)
+///        }
 ///    }
 ///
 ///    Other (0x1) {
