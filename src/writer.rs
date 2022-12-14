@@ -702,7 +702,7 @@ mod test {
 
     /// Tests tagging a union
     #[test]
-    fn test_union() {
+    fn test_tag_union() {
         let mut writer = TdfWriter::default();
         writer.tag_union_start(b"TEST", 15);
         assert_eq!(writer.buffer.len(), 5);
@@ -722,5 +722,71 @@ mod test {
         assert_eq!(writer.buffer[4], 5);
         assert_eq!(writer.buffer[8], TdfType::VarInt.value());
         assert_eq!(writer.buffer[9], 15);
+    }
+
+    /// Tests tagging for value types
+    #[test]
+    fn test_tag_value() {
+        let mut writer = TdfWriter::default();
+        writer.tag_value(b"TEST", &12u8);
+        assert_eq!(writer.buffer.len(), 5);
+        assert_eq!(writer.buffer[3], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[4], 12);
+    }
+
+    /// Tests writing an empty list
+    #[test]
+    fn test_tag_list_empty() {
+        let mut writer = TdfWriter::default();
+        writer.tag_list_empty(b"TEST", TdfType::VarInt);
+        assert_eq!(writer.buffer.len(), 6);
+        assert_eq!(writer.buffer[3], TdfType::List.value());
+        assert_eq!(writer.buffer[4], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[5], 0);
+    }
+
+    /// Tests writing an empty list of varints
+    #[test]
+    fn test_tag_var_int_list_empty() {
+        let mut writer = TdfWriter::default();
+        writer.tag_var_int_list_empty(b"TEST");
+        assert_eq!(writer.buffer.len(), 5);
+        assert_eq!(writer.buffer[3], TdfType::VarIntList.value());
+        assert_eq!(writer.buffer[4], 0);
+    }
+
+    /// Tests writing a map tag and details
+    #[test]
+    fn test_tag_map_start() {
+        let mut writer = TdfWriter::default();
+        writer.tag_map_start(b"TEST", TdfType::String, TdfType::VarInt, 0);
+        assert_eq!(writer.buffer.len(), 7);
+        assert_eq!(writer.buffer[3], TdfType::Map.value());
+        assert_eq!(writer.buffer[4], TdfType::String.value());
+        assert_eq!(writer.buffer[5], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[6], 0);
+    }
+
+    /// Tests writing a pair
+    #[test]
+    fn test_tag_pair() {
+        let mut writer = TdfWriter::default();
+        writer.tag_pair(b"TEST", (5, 10));
+        assert_eq!(writer.buffer.len(), 6);
+        assert_eq!(writer.buffer[3], TdfType::Pair.value());
+        assert_eq!(writer.buffer[4], 5);
+        assert_eq!(writer.buffer[5], 10);
+    }
+
+    /// Tests writing a triple
+    #[test]
+    fn test_tag_triple() {
+        let mut writer = TdfWriter::default();
+        writer.tag_triple(b"TEST", (5, 10, 50));
+        assert_eq!(writer.buffer.len(), 7);
+        assert_eq!(writer.buffer[3], TdfType::Triple.value());
+        assert_eq!(writer.buffer[4], 5);
+        assert_eq!(writer.buffer[5], 10);
+        assert_eq!(writer.buffer[6], 50);
     }
 }
