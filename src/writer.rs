@@ -593,7 +593,7 @@ mod test {
         for value in u16::MIN..u16::MAX {
             writer.tag_u16(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: u16 = reader.tag("TEST").expect("Failed to decode tag u8 value");
+            let decoded: u16 = reader.tag("TEST").expect("Failed to decode tag u16 value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -608,7 +608,7 @@ mod test {
         for value in (u32::MAX - 65535)..u32::MAX {
             writer.tag_u32(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: u32 = reader.tag("TEST").expect("Failed to decode tag u8 value");
+            let decoded: u32 = reader.tag("TEST").expect("Failed to decode tag u32 value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -623,7 +623,7 @@ mod test {
         for value in (u64::MAX - 65535)..u64::MAX {
             writer.tag_u64(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: u64 = reader.tag("TEST").expect("Failed to decode tag u8 value");
+            let decoded: u64 = reader.tag("TEST").expect("Failed to decode tag u64 value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -638,7 +638,9 @@ mod test {
         for value in (usize::MAX - 65535)..usize::MAX {
             writer.tag_usize(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: usize = reader.tag("TEST").expect("Failed to decode tag u8 value");
+            let decoded: usize = reader
+                .tag("TEST")
+                .expect("Failed to decode tag usize value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -788,5 +790,150 @@ mod test {
         assert_eq!(writer.buffer[4], 5);
         assert_eq!(writer.buffer[5], 10);
         assert_eq!(writer.buffer[6], 50);
+    }
+
+    /// Tests writing an empty string
+    #[test]
+    fn test_write_empty_str() {
+        let mut writer = TdfWriter::default();
+        writer.write_empty_str();
+        assert_eq!(&writer.buffer, &[1, 0]);
+    }
+
+    /// Tests writing float values
+    #[test]
+    fn test_write_f32() {
+        let mut writer = TdfWriter::default();
+        let mut value: f32 = 1.0;
+        while value < f32::MAX {
+            let expected = value.to_be_bytes();
+            writer.write_f32(value);
+            assert_eq!(&writer.buffer, &expected);
+            writer.clear();
+            value *= 2.0;
+        }
+    }
+
+    #[test]
+    fn test_write_u8() {
+        let mut writer = TdfWriter::default();
+        for value in u8::MIN..u8::MAX {
+            writer.write_u8(value);
+            let mut reader = TdfReader::new(&writer.buffer);
+            let decoded: u8 = reader.read_u8().expect("Failed to decode tag u8 value");
+            assert_eq!(value, decoded);
+            writer.clear();
+        }
+    }
+
+    /// Tests tagging all the different u16 values. Writing and
+    /// then reading them to see if they are correct
+    ///
+    #[test]
+    fn test_write_u16() {
+        let mut writer = TdfWriter::default();
+        for value in u16::MIN..u16::MAX {
+            writer.write_u16(value);
+            let mut reader = TdfReader::new(&writer.buffer);
+            let decoded: u16 = reader.read_u16().expect("Failed to decode tag u16 value");
+            assert_eq!(value, decoded);
+            writer.clear();
+        }
+    }
+
+    /// Tests tagging a bunch of u32 values. Writing and
+    /// then reading them to see if they are correct
+    /// (Takes the last 65535 numbers)
+    #[test]
+    fn test_write_u32() {
+        let mut writer = TdfWriter::default();
+        for value in (u32::MAX - 65535)..u32::MAX {
+            writer.write_u32(value);
+            let mut reader = TdfReader::new(&writer.buffer);
+            let decoded: u32 = reader.read_u32().expect("Failed to decode tag u32 value");
+            assert_eq!(value, decoded);
+            writer.clear();
+        }
+    }
+
+    /// Tests tagging a bunch of u64 values. Writing and
+    /// then reading them to see if they are correct
+    /// (Takes the last 65535 numbers)
+    #[test]
+    fn test_write_u64() {
+        let mut writer = TdfWriter::default();
+        for value in (u64::MAX - 65535)..u64::MAX {
+            writer.write_u64(value);
+            let mut reader = TdfReader::new(&writer.buffer);
+            let decoded: u64 = reader.read_u64().expect("Failed to decode tag u64 value");
+            assert_eq!(value, decoded);
+            writer.clear();
+        }
+    }
+
+    /// Tests tagging a bunch of usize values. Writing and
+    /// then reading them to see if they are correct
+    /// (Takes the last 65535 numbers)
+    #[test]
+    fn test_write_usize() {
+        let mut writer = TdfWriter::default();
+        for value in (usize::MAX - 65535)..usize::MAX {
+            writer.write_usize(value);
+            let mut reader = TdfReader::new(&writer.buffer);
+            let decoded: usize = reader
+                .read_usize()
+                .expect("Failed to decode tag usize value");
+            assert_eq!(value, decoded);
+            writer.clear();
+        }
+    }
+
+    /// Tests tagging a boolean value
+    #[test]
+    fn test_write_bool() {
+        // Possible boolean values and their expected u8 value
+        const VALUES: [(bool, u8); 2] = [(true, 1), (false, 0)];
+        let mut writer = TdfWriter::default();
+        for (value, expected) in VALUES {
+            writer.write_bool(value);
+            assert_eq!(writer.buffer.len(), 1);
+            assert_eq!(writer.buffer[0], expected);
+            writer.clear();
+        }
+    }
+
+    /// Tests tagging a string value
+    #[test]
+    fn test_write_str() {
+        const TEXT: &str = "Test string";
+        const TEXT_BYTES: &[u8] = b"Test string\0";
+
+        let mut writer = TdfWriter::default();
+        writer.write_str(TEXT);
+
+        // 3) tag 1) type 1) length TEXT.len()) bytes 1) terminator
+        assert_eq!(writer.buffer.len(), 1 + TEXT.len() + 1);
+
+        let length_bytes = (TEXT.len() + 1).encode_bytes();
+
+        assert_eq!(&writer.buffer[..length_bytes.len()], &length_bytes);
+        assert_eq!(&writer.buffer[length_bytes.len()..], TEXT_BYTES);
+
+        let mut reader = TdfReader::new(&writer.buffer);
+        let value: String = reader.read_string().unwrap();
+
+        assert_eq!(value, TEXT)
+    }
+
+    /// Tests clearing the buffer
+    #[test]
+    fn test_clear() {
+        let mut writer = TdfWriter::default();
+        writer.write_empty_str();
+        writer.write_empty_str();
+        writer.write_empty_str();
+        writer.write_empty_str();
+        writer.clear();
+        assert_eq!(writer.buffer.len(), 0)
     }
 }
