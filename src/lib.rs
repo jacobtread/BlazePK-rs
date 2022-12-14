@@ -9,3 +9,6 @@ pub mod reader;
 pub mod tag;
 pub mod types;
 pub mod writer;
+
+#[cfg(feature = "serde")]
+pub mod serialize;

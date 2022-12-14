@@ -1,5 +1,4 @@
 use crate::codec::{Decodable, Encodable, ValueType};
-
 use crate::error::{DecodeError, DecodeResult};
 use crate::reader::TdfReader;
 use crate::tag::TdfType;
@@ -775,7 +774,7 @@ impl<C> ValueType for Vec<C> {
 }
 
 /// Pair type alias. (Note Pairs should only ever be used with VarInts)
-type Pair<A, B> = (A, B);
+pub type Pair<A, B> = (A, B);
 
 impl<A, B> Encodable for Pair<A, B>
 where
@@ -807,7 +806,7 @@ impl<A, B> ValueType for Pair<A, B> {
 }
 
 /// Triple type alias. (Note Triples should only ever be used with VarInts)
-type Triple<A, B, C> = (A, B, C);
+pub type Triple<A, B, C> = (A, B, C);
 
 impl<A, B, C> Encodable for Triple<A, B, C>
 where
