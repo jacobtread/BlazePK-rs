@@ -15,8 +15,14 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Trait for implementing packet target details
 pub trait PacketComponent: Debug + Eq + PartialEq {
+    // Converts the component command value into its u16 value
     fn command(&self) -> u16;
 
+    /// Finds a component with the matching value based on whether
+    /// the packet is a notify packet or not
+    ///
+    /// `value`  The component value
+    /// `notify` Whether the packet was a notify packet
     fn from_value(value: u16, notify: bool) -> Self;
 }
 
@@ -29,10 +35,16 @@ pub trait PacketComponents: Debug + Eq + PartialEq + Sized {
 
     /// Decodes the packet component using the provided component id,
     /// command id, and whether the packet is a notify packet
+    ///
+    /// `component` The packet component
+    /// `command`   The packet command
+    /// `notify`    Whether the packet is a notify packet
     fn from_values(component: u16, command: u16, notify: bool) -> Self;
 
     /// Decodes the packet component using the details stored in the provided
     /// packet header
+    ///
+    /// `header` The packet header to decode from
     fn from_header(header: &PacketHeader) -> Self {
         Self::from_values(
             header.component,
@@ -115,6 +127,7 @@ impl PacketHeader {
     /// Creates a request header for the provided id, component
     /// and command
     ///
+    /// `id`        The packet ID
     /// `component` The component to use
     /// `command`   The command to use
     pub fn request(id: u16, component: u16, command: u16) -> Self {

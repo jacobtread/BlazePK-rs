@@ -1,15 +1,15 @@
-use std::borrow::Cow;
-
 use crate::{
     codec::{Decodable, ValueType},
     error::{DecodeError, DecodeResult},
     tag::{Tag, TdfType},
     types::{TdfMap, UNION_UNSET},
 };
+use std::borrow::Cow;
 
 /// Buffered readable implementation. Allows reading through the
 /// underlying slice using a cursor and with a position that can
-/// be saved usin the marker.
+/// be saved using the marker. Provides functions for reading
+/// certain data types in the Blaze format
 pub struct TdfReader<'a> {
     /// The underlying buffer to read from
     pub buffer: &'a [u8],
@@ -18,6 +18,8 @@ pub struct TdfReader<'a> {
     pub cursor: usize,
 }
 
+/// Macro for implementing VarInt decoding for a specific number type
+/// to prevent allocating for a u64 for every other number type
 macro_rules! impl_decode_var {
     ($ty:ty, $reader:ident) => {{
         let first: u8 = $reader.read_byte()?;
@@ -336,6 +338,7 @@ impl<'a> TdfReader<'a> {
         }
     }
 
+    /// Reads the next TdfType value after the cursor
     pub fn read_type(&mut self) -> DecodeResult<TdfType> {
         let value = self.read_byte()?;
         TdfType::from_value(value)
@@ -704,3 +707,6 @@ impl<'a> TdfReader<'a> {
         Ok(count)
     }
 }
+
+#[cfg(test)]
+mod test {}

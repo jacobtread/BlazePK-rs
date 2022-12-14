@@ -1,6 +1,7 @@
 use crate::{error::DecodeResult, reader::TdfReader, tag::TdfType, writer::TdfWriter};
 use std::io;
 
+/// Trait for something that can be decoded from a TdfReader
 pub trait Decodable: Sized {
     /// Function for implementing decoding of Self from
     /// the provided Reader. Will return None if self
@@ -10,6 +11,7 @@ pub trait Decodable: Sized {
     fn decode(reader: &mut TdfReader) -> DecodeResult<Self>;
 }
 
+/// Trait for something that can be encoded onto a TdfWriter
 pub trait Encodable: Sized {
     /// Function for implementing encoding of Self to the
     /// provided vec of bytes
@@ -26,11 +28,15 @@ pub trait Encodable: Sized {
     }
 }
 
+/// Trait for a type that conforms to one of the standard TdfTypes
+/// used on structures that implement Decodable or Encodable to allow
+/// them to be encoded as tag fields
 pub trait ValueType {
     /// The type of tdf value this is
     fn value_type() -> TdfType;
 }
 
+/// Macro for generating the ValueType implementation for a type
 #[macro_export]
 macro_rules! value_type {
     ($for:ty, $type:expr) => {
