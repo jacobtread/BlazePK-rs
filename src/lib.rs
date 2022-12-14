@@ -1,6 +1,4 @@
 //! Rust implementation of the Blaze packet system
-//!
-//! See README for usage
 pub mod codec;
 pub mod error;
 pub mod macros;
