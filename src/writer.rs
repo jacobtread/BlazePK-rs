@@ -454,7 +454,7 @@ impl From<TdfWriter> for Vec<u8> {
 #[cfg(test)]
 mod test {
     use super::TdfWriter;
-    use crate::{codec::Encodable, reader::TdfReader, tag::TdfType};
+    use crate::{codec::Encodable, reader::TdfReader, tag::TdfType, types::UNION_UNSET};
 
     /// Test for ensuring some common tags of different
     /// length are encoded to the correct values. The tags
@@ -698,5 +698,29 @@ mod test {
         assert_eq!(writer.buffer.len(), 5);
         assert_eq!(writer.buffer[3], TdfType::Group.value());
         assert_eq!(writer.buffer[4], 0);
+    }
+
+    /// Tests tagging a union
+    #[test]
+    fn test_union() {
+        let mut writer = TdfWriter::default();
+        writer.tag_union_start(b"TEST", 15);
+        assert_eq!(writer.buffer.len(), 5);
+        assert_eq!(writer.buffer[3], TdfType::Union.value());
+        assert_eq!(writer.buffer[4], 15);
+        writer.clear();
+
+        writer.tag_union_unset(b"TEST");
+        assert_eq!(writer.buffer.len(), 5);
+        assert_eq!(writer.buffer[3], TdfType::Union.value());
+        assert_eq!(writer.buffer[4], UNION_UNSET);
+        writer.clear();
+
+        writer.tag_union_value(b"TEST", 5, b"TEST2", 15);
+        assert_eq!(writer.buffer.len(), 10);
+        assert_eq!(writer.buffer[3], TdfType::Union.value());
+        assert_eq!(writer.buffer[4], 5);
+        assert_eq!(writer.buffer[8], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[9], 15);
     }
 }
