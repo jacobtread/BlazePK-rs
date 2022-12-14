@@ -453,9 +453,8 @@ impl From<TdfWriter> for Vec<u8> {
 
 #[cfg(test)]
 mod test {
-    use crate::{reader::TdfReader, tag::TdfType};
-
     use super::TdfWriter;
+    use crate::{codec::Encodable, reader::TdfReader, tag::TdfType};
 
     /// Test for ensuring some common tags of different
     /// length are encoded to the correct values. The tags
@@ -629,7 +628,7 @@ mod test {
             writer.clear();
         }
     }
-    
+
     /// Tests tagging a bunch of usize values. Writing and
     /// then reading them to see if they are correct
     /// (Takes the last 65535 numbers)
@@ -643,5 +642,61 @@ mod test {
             assert_eq!(value, decoded);
             writer.clear();
         }
+    }
+
+    /// Tests tagging an empty string
+    #[test]
+    fn test_tag_str_empty() {
+        let mut writer = TdfWriter::default();
+        writer.tag_str_empty(b"TEST");
+        assert_eq!(writer.buffer.len(), 6);
+        assert_eq!(writer.buffer[3], TdfType::String.value());
+        assert_eq!(&writer.buffer[4..6], &[1, 0]);
+    }
+
+    /// Tests tagging an empty blob
+    #[test]
+    fn test_tag_empty_blob() {
+        let mut writer = TdfWriter::default();
+        writer.tag_empty_blob(b"TEST");
+        assert_eq!(writer.buffer.len(), 5);
+        assert_eq!(writer.buffer[3], TdfType::Blob.value());
+        assert_eq!(writer.buffer[4], 0);
+    }
+
+    /// Tests tagging a string value
+    #[test]
+    fn test_tag_str() {
+        const TEXT: &str = "Test string";
+        const TEXT_BYTES: &[u8] = b"Test string\0";
+
+        let mut writer = TdfWriter::default();
+        writer.tag_str(b"TEST", TEXT);
+
+        // 3) tag 1) type 1) length TEXT.len()) bytes 1) terminator
+        assert_eq!(writer.buffer.len(), 5 + TEXT.len() + 1);
+        assert_eq!(writer.buffer[3], TdfType::String.value());
+
+        let length_bytes = (TEXT.len() + 1).encode_bytes();
+
+        assert_eq!(&writer.buffer[4..4 + length_bytes.len()], &length_bytes);
+        assert_eq!(&writer.buffer[4 + length_bytes.len()..], TEXT_BYTES);
+
+        let mut reader = TdfReader::new(&writer.buffer);
+        let value: String = reader.tag("TEST").unwrap();
+
+        assert_eq!(value, TEXT)
+    }
+
+    /// Tests tagging a group
+    #[test]
+    fn test_tag_group() {
+        let mut writer = TdfWriter::default();
+        writer.tag_group(b"TEST");
+        writer.tag_group_end();
+
+        assert_eq!(writer.buffer.len(), 5);
+        assert_eq!(writer.buffer[3], TdfType::Group.value());
+        assert_eq!(writer.buffer[4], 0);
     }
 }
