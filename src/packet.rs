@@ -6,6 +6,10 @@ use crate::{
 #[cfg(feature = "blaze-ssl")]
 use blaze_ssl_async::stream::BlazeStream;
 use bytes::Bytes;
+
+#[cfg(feature = "actix")]
+use bytes::{Buf, BufMut, BytesMut};
+
 use std::fmt::Debug;
 use std::io;
 #[cfg(feature = "sync")]
@@ -210,6 +214,67 @@ impl PacketHeader {
         let mut header = Vec::with_capacity(12);
         self.write_bytes(&mut header, length);
         header
+    }
+
+    /// Writes the header data onto the provided bytes.
+    ///
+    /// `bytes`  The bytes to write to
+    /// `length` The length of the packet content
+    pub fn write_bytes_mut(&self, bytes: &mut BytesMut, length: usize) {
+        let is_extended = length > 0xFFFF;
+        bytes.reserve(if is_extended { 12 } else { 14 });
+        bytes.put_u16(length as u16);
+        bytes.put_u16(self.component);
+        bytes.put_u16(self.command);
+        bytes.put_u16(self.error);
+        bytes.put_u8((self.ty.value() >> 8) as u8);
+        bytes.put_u8(if is_extended { 0x10 } else { 0x00 });
+        bytes.put_u16(self.id);
+        if is_extended {
+            bytes.put_u8(((length & 0xFF000000) >> 24) as u8);
+            bytes.put_u8(((length & 0x00FF0000) >> 16) as u8);
+        }
+    }
+
+    /// Attempts to read the packet header from the provided mutable bytes. If
+    /// the length of the buffer is too short for the header to be fully
+    /// parsed None is returned instead.
+    ///
+    /// `bytes` The bytes to read from
+    #[cfg(feature = "actix")]
+    pub fn read_bytes_mut(bytes: &mut BytesMut) -> Option<(PacketHeader, usize)> {
+        let mut header = {
+            if bytes.len() < 12 {
+                return None;
+            }
+            bytes.split_to(12)
+        };
+
+        let mut length = header.get_u16() as usize;
+        let component = header.get_u16();
+        let command = header.get_u16();
+        let error = header.get_u16();
+        let q_type = header.get_u16();
+        let id = header.get_u16();
+        if q_type & 0x10 != 0 {
+            let mut buffer = {
+                if bytes.len() < 2 {
+                    return None;
+                }
+                bytes.split_to(2)
+            };
+            let ext_length = buffer.get_u16() as usize;
+            length += ext_length << 16;
+        }
+        let ty = PacketType::from_value(q_type);
+        let header = PacketHeader {
+            component,
+            command,
+            error,
+            ty,
+            id,
+        };
+        Some((header, length))
     }
 
     /// Syncronously reads a packet header from the provided input. Returning
