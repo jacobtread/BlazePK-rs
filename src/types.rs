@@ -239,6 +239,19 @@ impl<K, V> Default for TdfMap<K, V> {
     }
 }
 
+impl<K, V> Clone for TdfMap<K, V>
+where
+    K: Clone,
+    V: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            keys: self.keys.clone(),
+            values: self.values.clone(),
+        }
+    }
+}
+
 impl<K, V> Debug for TdfMap<K, V>
 where
     K: Debug,
