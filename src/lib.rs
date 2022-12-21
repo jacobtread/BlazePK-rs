@@ -8,8 +8,5 @@ pub mod tag;
 pub mod types;
 pub mod writer;
 
-#[cfg(feature = "actix")]
-pub mod actix;
-
 #[cfg(feature = "serde")]
 pub mod serialize;
