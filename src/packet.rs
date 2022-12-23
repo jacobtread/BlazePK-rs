@@ -3,8 +3,6 @@ use crate::{
     error::DecodeResult,
     reader::TdfReader,
 };
-#[cfg(feature = "blaze-ssl")]
-use blaze_ssl_async::stream::BlazeStream;
 use bytes::Bytes;
 use std::fmt::Debug;
 use std::io;
@@ -253,43 +251,6 @@ impl PacketHeader {
     #[cfg(feature = "async")]
     pub async fn read_async<R: AsyncRead + Unpin>(
         input: &mut R,
-    ) -> io::Result<(PacketHeader, usize)>
-    where
-        Self: Sized,
-    {
-        let mut header = [0u8; 12];
-        input.read_exact(&mut header).await?;
-        let mut length = decode_u16_be(&header[0..2])? as usize;
-        let component = decode_u16_be(&header[2..4])?;
-        let command = decode_u16_be(&header[4..6])?;
-        let error = decode_u16_be(&header[6..8])?;
-        let q_type = decode_u16_be(&header[8..10])?;
-        let id = decode_u16_be(&header[10..12])?;
-        if q_type & 0x10 != 0 {
-            let mut buffer = [0; 2];
-            input.read_exact(&mut buffer).await?;
-            let ext_length = u16::from_be_bytes(buffer);
-            length += (ext_length as usize) << 16;
-        }
-        let ty = PacketType::from_value(q_type);
-        let header = PacketHeader {
-            component,
-            command,
-            error,
-            ty,
-            id,
-        };
-        Ok((header, length))
-    }
-
-    /// Asyncronously reads a packet header from the provided BlazeStream from
-    /// the blaze-ssl system. Returning the Packet header as well as the length
-    /// of the packet.
-    ///
-    /// `input` The input blaze stream to read from
-    #[cfg(feature = "blaze-ssl")]
-    pub async fn read_blaze<R: AsyncRead + AsyncWrite + Unpin>(
-        input: &mut BlazeStream<R>,
     ) -> io::Result<(PacketHeader, usize)>
     where
         Self: Sized,
@@ -600,26 +561,6 @@ impl Packet {
         })
     }
 
-    /// Asyncronously reads a packet from the provided blaze ssl input stream
-    /// returning the packet that was read.
-    ///
-    /// `input` The input source to read from
-    #[cfg(feature = "blaze-ssl")]
-    pub async fn read_blaze<R: AsyncRead + AsyncWrite + Unpin>(
-        input: &mut BlazeStream<R>,
-    ) -> io::Result<Self>
-    where
-        Self: Sized,
-    {
-        let (header, length) = PacketHeader::read_blaze(input).await?;
-        let mut contents = vec![0u8; length];
-        input.read_exact(&mut contents).await?;
-        Ok(Self {
-            header,
-            contents: Bytes::from(contents),
-        })
-    }
-
     /// Syncronously reads a packet from the provided readable input
     /// returning the packet that was read along and also decodes
     /// the component using the provided `T` and returns that aswell
@@ -667,30 +608,6 @@ impl Packet {
         ))
     }
 
-    /// Reads a packet from the provided input without parsing
-    /// the contents of the packet
-    ///
-    /// `input` The input source to read from
-    #[cfg(feature = "blaze-ssl")]
-    pub async fn read_blaze_typed<T: PacketComponents, R: AsyncRead + AsyncWrite + Unpin>(
-        input: &mut BlazeStream<R>,
-    ) -> io::Result<(T, Self)>
-    where
-        Self: Sized,
-    {
-        let (header, length) = PacketHeader::read_blaze(input).await?;
-        let mut contents = vec![0u8; length];
-        input.read_exact(&mut contents).await?;
-        let component = T::from_header(&header);
-        Ok((
-            component,
-            Self {
-                header,
-                contents: Bytes::from(contents),
-            },
-        ))
-    }
-
     /// Handles writing the header and contents of this packet to
     /// the Writable object
     ///
@@ -720,25 +637,6 @@ impl Packet {
         let header = self.header.encode_bytes(content.len());
         output.write_all(&header).await?;
         output.write_all(content).await?;
-        Ok(())
-    }
-
-    /// Handles writing the header and contents of this packet to
-    /// the Writable object
-    ///
-    /// `output` The output source to write to
-    #[cfg(feature = "blaze-ssl")]
-    pub fn write_blaze<W: AsyncRead + AsyncWrite + Unpin>(
-        &self,
-        output: &mut BlazeStream<W>,
-    ) -> io::Result<()>
-    where
-        Self: Sized,
-    {
-        let content = &self.contents;
-        let header = self.header.encode_bytes(content.len());
-        output.write(&header)?;
-        output.write(content)?;
         Ok(())
     }
 
