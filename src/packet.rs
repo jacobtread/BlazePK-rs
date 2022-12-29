@@ -668,6 +668,12 @@ pub trait IntoResponse {
     fn into_response(self, req: Packet) -> Packet;
 }
 
+impl IntoResponse for () {
+    fn into_response(self, req: Packet) -> Packet {
+        req.respond_empty()
+    }
+}
+
 impl<E> IntoResponse for E
 where
     E: Encodable,

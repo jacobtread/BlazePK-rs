@@ -12,7 +12,18 @@ use crate::{
 /// `S` is additional state provided to the handle function when handling
 /// routing. This is likely a session
 pub struct Router<C = (), S = ()> {
-    routes: HashMap<C, Box<dyn Route<S>>>,
+    routes: HashMap<C, BoxedRoute<S>>,
+}
+
+impl<C, S: Send> Clone for Router<C, S>
+where
+    C: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            routes: self.routes.clone(),
+        }
+    }
 }
 
 impl Router {
@@ -33,18 +44,18 @@ where
     ///
     /// `component` The route component
     /// `route`     The route function
-    pub fn route<R, Req, Res>(mut self, component: C, route: R) -> Self
+    pub fn route<R, Req, Res>(&mut self, component: C, route: R) -> &mut Self
     where
         R: FnRoute<Req, Res>,
-        Req: 'static,
-        Res: 'static,
+        Req: Send + 'static,
+        Res: Send + 'static,
     {
         self.routes.insert(
             component,
-            Box::new(FnRouteWrapper {
+            BoxedRoute(Box::new(FnRouteWrapper {
                 inner: route,
                 _marker: PhantomData,
-            }),
+            })),
         );
         self
     }
@@ -53,18 +64,18 @@ where
     ///
     /// `component` The route component
     /// `route`     The route function
-    pub fn route_stateful<R, Req, Res>(mut self, component: C, route: R) -> Self
+    pub fn route_stateful<R, Req, Res>(&mut self, component: C, route: R) -> &mut Self
     where
         R: FnRouteStateful<Req, Res, S>,
-        Req: 'static,
-        Res: 'static,
+        Req: Send + 'static,
+        Res: Send + 'static,
     {
         self.routes.insert(
             component,
-            Box::new(StateFnRouteWrapper {
+            BoxedRoute(Box::new(StateFnRouteWrapper {
                 inner: route,
                 _marker: PhantomData,
-            }),
+            })),
         );
         self
     }
@@ -72,16 +83,18 @@ where
     /// Handles the routing for the provided packet with
     /// the provided handle state. Will return the response
     /// packet or a decoding error for failed req decodes.
-    /// Will return None if there were no routes available to
-    /// handle the component
+    /// Will return an empty packet for routes that are not
+    /// registered
     ///
     /// `state`  The additional handle state
     /// `packet` The packet to handle routing
-    pub async fn handle(&self, state: S, packet: Packet) -> Option<DecodeResult<Packet>> {
+    pub async fn handle(&self, state: S, packet: Packet) -> DecodeResult<Packet> {
         let component = C::from_header(&packet.header);
-        let route = self.routes.get(&component)?;
-        let response = route.handle(state, packet).await;
-        Some(response)
+        let route = match self.routes.get(&component) {
+            Some(value) => value,
+            None => return Ok(packet.respond_empty()),
+        };
+        route.0.handle(state, packet).await
     }
 }
 
@@ -89,14 +102,26 @@ where
 /// where the output is a BlazeResult with a packet
 type RouteFuture = Pin<Box<dyn Future<Output = DecodeResult<Packet>>>>;
 
+/// Boxed variant of a route which allows itself to be
+/// cloned
+struct BoxedRoute<S: Send>(Box<dyn Route<S>>);
+
+impl<S: Send> Clone for BoxedRoute<S> {
+    fn clone(&self) -> Self {
+        BoxedRoute(self.0.boxed_clone())
+    }
+}
 /// Route implementation which handles an incoming packet along with the
-trait Route<S> {
+trait Route<S: Send>: Send {
     /// Route handle function takes in the state and the packet to handle
     /// returning a future which resolves to the response
     ///
     /// `state`  The additional state provided to this route
     /// `packet` The packet to handle
     fn handle(&self, state: S, packet: Packet) -> RouteFuture;
+
+    /// Cloning implementation
+    fn boxed_clone(&self) -> Box<dyn Route<S>>;
 }
 
 /// Trait implementation for function based routing
@@ -132,11 +157,20 @@ struct StateFnRouteWrapper<I, Req, Res> {
 impl<I, Req, Res, S> Route<S> for StateFnRouteWrapper<I, Req, Res>
 where
     I: FnRouteStateful<Req, Res, S>,
+    Req: Send + 'static,
+    Res: Send + 'static,
     S: Send + 'static,
 {
     fn handle(&self, state: S, packet: Packet) -> RouteFuture {
         let handler = self.inner.clone();
         Box::pin(handler.handle(state, packet))
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Route<S>> {
+        Box::new(StateFnRouteWrapper {
+            inner: self.inner.clone(),
+            _marker: PhantomData,
+        })
     }
 }
 
@@ -176,13 +210,22 @@ where
     }
 }
 
-impl<I, Req, Res, S> Route<S> for FnRouteWrapper<I, Req, Res>
+impl<I, Req, Res, S: Send> Route<S> for FnRouteWrapper<I, Req, Res>
 where
     I: FnRoute<Req, Res>,
+    Req: Send + 'static,
+    Res: Send + 'static,
 {
     fn handle(&self, _state: S, packet: Packet) -> RouteFuture {
         let handler = self.inner.clone();
         Box::pin(handler.handle(packet))
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Route<S>> {
+        Box::new(FnRouteWrapper {
+            inner: self.inner.clone(),
+            _marker: PhantomData,
+        })
     }
 }
 

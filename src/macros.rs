@@ -41,7 +41,7 @@ macro_rules! define_components {
             }
         )*
     ) => {
-        #[derive(Debug, Eq, PartialEq)]
+        #[derive(Debug, Clone, Eq, PartialEq)]
         pub enum Components {
             $($component($component),)*
             Unknown(u16, u16)
@@ -70,7 +70,7 @@ macro_rules! define_components {
         }
 
         $(
-            #[derive(Debug, Eq, PartialEq)]
+            #[derive(Debug, Clone, Eq, PartialEq)]
             pub enum $component {
                 $($command,)*
                 $($($command_notify,)*)?
