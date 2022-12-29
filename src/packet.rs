@@ -4,10 +4,10 @@ use crate::{
     reader::TdfReader,
 };
 use bytes::Bytes;
-use std::fmt::Debug;
 use std::io;
 #[cfg(feature = "sync")]
 use std::io::{Read, Write};
+use std::{fmt::Debug, hash::Hash};
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -26,7 +26,7 @@ pub trait PacketComponent: Debug + Eq + PartialEq {
 
 /// Trait implemented by packet components for converting them into
 /// values and finding values from components
-pub trait PacketComponents: Debug + Eq + PartialEq + Sized {
+pub trait PacketComponents: Debug + Eq + PartialEq + Sized + Hash {
     /// Converts the packet component into the ID of the
     /// component, and command
     fn values(&self) -> (u16, u16);
@@ -658,5 +658,46 @@ impl Packet {
         let mut output = Vec::with_capacity(14 + self.contents.len());
         self.write_bytes(&mut output);
         output
+    }
+}
+
+/// Trait for a type that can be converted into a packet
+/// response using the provided req packet
+pub trait IntoResponse {
+    /// Into packet conversion
+    fn into_response(self, req: Packet) -> Packet;
+}
+
+impl<E> IntoResponse for E
+where
+    E: Encodable,
+{
+    fn into_response(self, req: Packet) -> Packet {
+        req.respond(self)
+    }
+}
+
+impl<S, E> IntoResponse for Result<S, E>
+where
+    S: IntoResponse,
+    E: IntoResponse,
+{
+    fn into_response(self, req: Packet) -> Packet {
+        match self {
+            Ok(value) => value.into_response(req),
+            Err(value) => value.into_response(req),
+        }
+    }
+}
+
+impl<S> IntoResponse for Option<S>
+where
+    S: IntoResponse,
+{
+    fn into_response(self, req: Packet) -> Packet {
+        match self {
+            Some(value) => value.into_response(req),
+            None => req.respond_empty(),
+        }
     }
 }

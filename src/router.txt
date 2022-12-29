@@ -1,0 +1,169 @@
+use std::{collections::HashMap, future::Future, marker::PhantomData, pin::Pin};
+
+use blaze_pk::{
+    codec::{Decodable, Encodable},
+    packet::Packet,
+};
+
+use crate::blaze::{components::Components, errors::BlazeResult};
+
+use super::{models::EmptyModel, session::Session};
+
+#[derive(Default)]
+pub struct Router<S> {
+    routes: HashMap<Components, Box<dyn PacketHandler>>,
+}
+
+impl Router {
+    pub fn route<H, Req, Res>(mut self, component: Components, handler: H) -> Self
+    where
+        Req: Decodable + Send + 'static,
+        Res: Encodable + Send + 'static,
+        H: Handler<Req, Res> + Clone + Send + 'static,
+    {
+        self.routes.insert(
+            component,
+            Box::new(WrappedHandler {
+                handler,
+                _marker: PhantomData,
+            }),
+        );
+        self
+    }
+
+    pub async fn handle(
+        &self,
+        session: &mut Session,
+        component: Components,
+        packet: Packet,
+    ) -> BlazeResult<Packet> {
+        let route = match self.routes.get(&component) {
+            Some(value) => value,
+            None => {
+                println!("Got from generic empty repsonse");
+                // Empty response on handling failed
+                return Ok(packet.respond_empty());
+            }
+        };
+        route.handle(Pin::new(session), packet).await
+    }
+}
+
+/// Future where the output result is a blaze result with the
+/// success type being a packet
+type PacketFuture = Pin<Box<dyn Future<Output = BlazeResult<Packet>> + Send>>;
+
+/// Handler type for handling packets in the router
+trait PacketHandler {
+    /// Handler function for doing something to a packet future
+    fn handle(&self, session: Pin<&mut Session>, packet: Packet) -> PacketFuture;
+}
+
+pub struct WrappedHandler<H, Req, Res> {
+    handler: H,
+    _marker: PhantomData<(Req, Res)>,
+}
+
+impl<H, Req, Res> PacketHandler for WrappedHandler<H, Req, Res>
+where
+    Req: Decodable + Send + 'static,
+    Res: Encodable + Send + 'static,
+    H: Handler<Req, Res> + Clone + Send + 'static,
+{
+    fn handle(&self, session: Pin<&mut Session>, packet: Packet) -> PacketFuture {
+        let handler = self.handler.clone();
+        Box::pin(async move {
+            let req: Req = packet.decode()?;
+            let res: Res = handler.handle(session, req).await?;
+            Ok(packet.respond(res))
+        })
+    }
+}
+
+pub trait Handler<Req, Res>: Clone + Send + Sized + 'static {
+    type Future: Future<Output = BlazeResult<Res>> + Send + 'static;
+
+    fn handle(self, session: Pin<&mut Session>, req: Req) -> Self::Future;
+}
+
+impl<F, Fut, Req, Res> Handler<Req, Res> for F
+where
+    F: FnOnce(&mut Session, Req) -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = BlazeResult<Res>> + Send + 'static,
+    Req: Decodable + Send + 'static,
+    Res: Encodable + Send + 'static,
+{
+    type Future = Pin<Box<dyn Future<Output = BlazeResult<Res>> + Send>>;
+
+    fn handle(self, session: Pin<&mut Session>, req: Req) -> Self::Future {
+        Box::pin(async move { self(session.get_mut(), req).await })
+    }
+}
+impl<F, Fut, Res> Handler<(), Res> for F
+where
+    F: FnOnce() -> Fut + Clone + Send + 'static,
+    Fut: Future<Output = BlazeResult<Res>> + Send + 'static,
+    Res: Encodable + Send + 'static,
+{
+    type Future = Pin<Box<dyn Future<Output = BlazeResult<Res>> + Send>>;
+
+    fn handle(self, _session: Pin<&mut Session>, req: ()) -> Self::Future {
+        Box::pin(self(req))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use blaze_pk::packet::Packet;
+
+    use super::Router;
+    use crate::{
+        blaze::{
+            components::{Authentication, Components},
+            errors::BlazeError,
+        },
+        servers::main::{models::EmptyModel, session::Session},
+    };
+
+    async fn test_fn_1(_: &mut Session, req: EmptyModel) -> Result<EmptyModel, BlazeError> {
+        println!("Got from test_fn_1");
+        Ok(EmptyModel)
+    }
+
+    async fn test_fn_2(_: &mut Session, req: EmptyModel) -> Result<EmptyModel, BlazeError> {
+        println!("Got from test_fn_2");
+        Ok(EmptyModel)
+    }
+
+    async fn handle_create_account(
+        session: &mut Session,
+        req: CreateAccountRequest,
+    ) -> Result<AuthResponse, BlazeError> {
+        // Long contents ommited
+        let response = AuthResponse::new(player, session_token, false);
+        Ok(response)
+    }
+
+    #[tokio::test]
+    async fn test() {
+        let router = Router::default()
+            .route(
+                Components::Authentication(Authentication::AcceptLegalDocs),
+                test_fn_1,
+            )
+            .route(
+                Components::Authentication(Authentication::AcceptTOS),
+                test_fn_2,
+            );
+
+        let packet =
+            Packet::request_empty(1, Components::Authentication(Authentication::AcceptTOS));
+        let res = router
+            .handle(
+                Components::Authentication(Authentication::AcceptLegalDocs),
+                packet,
+            )
+            .await
+            .unwrap();
+    }
+}

@@ -4,6 +4,7 @@ pub mod error;
 pub mod macros;
 pub mod packet;
 pub mod reader;
+pub mod router;
 pub mod tag;
 pub mod types;
 pub mod writer;

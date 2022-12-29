@@ -103,5 +103,15 @@ macro_rules! define_components {
                 }
             }
         )*
+
+        /// Hashing implementation to allow components to be used
+        /// as map keys
+        impl Hash for Components {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                use $crate::packet::PacketComponents;
+                self.values().hash(state)
+            }
+        }
+
     };
 }
