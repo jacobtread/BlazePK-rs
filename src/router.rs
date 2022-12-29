@@ -15,9 +15,10 @@ pub struct Router<C = (), S = ()> {
     routes: HashMap<C, BoxedRoute<S>>,
 }
 
-impl<C, S: Send> Clone for Router<C, S>
+impl<C, S> Clone for Router<C, S>
 where
     C: Clone,
+    S: Send + Sync,
 {
     fn clone(&self) -> Self {
         Self {
@@ -38,7 +39,7 @@ impl Router {
 impl<C, S> Router<C, S>
 where
     C: PacketComponents,
-    S: Send + 'static,
+    S: Send + Sync + 'static,
 {
     /// Adds a new route that doesn't require state to be provided
     ///
@@ -100,19 +101,19 @@ where
 
 /// Future type for route implementations which is a pinned box of a future
 /// where the output is a BlazeResult with a packet
-type RouteFuture = Pin<Box<dyn Future<Output = DecodeResult<Packet>>>>;
+type RouteFuture = Pin<Box<dyn Future<Output = DecodeResult<Packet>> + Send>>;
 
 /// Boxed variant of a route which allows itself to be
 /// cloned
-struct BoxedRoute<S: Send>(Box<dyn Route<S>>);
+struct BoxedRoute<S>(Box<dyn Route<S>>);
 
-impl<S: Send> Clone for BoxedRoute<S> {
+impl<S> Clone for BoxedRoute<S> {
     fn clone(&self) -> Self {
         BoxedRoute(self.0.boxed_clone())
     }
 }
 /// Route implementation which handles an incoming packet along with the
-trait Route<S: Send>: Send {
+trait Route<S>: Send + Sync {
     /// Route handle function takes in the state and the packet to handle
     /// returning a future which resolves to the response
     ///
@@ -125,7 +126,7 @@ trait Route<S: Send>: Send {
 }
 
 /// Trait implementation for function based routing
-pub trait FnRoute<Req, Res>: Clone + Send + Sized + 'static {
+pub trait FnRoute<Req, Res>: Clone + Send + Sync + Sized + 'static {
     fn handle(self, packet: Packet) -> RouteFuture;
 }
 
@@ -135,12 +136,12 @@ struct FnRouteWrapper<I, Req, Res> {
     /// The inner function router
     inner: I,
     /// Phantom data storage for the request and res types
-    _marker: PhantomData<(Req, Res)>,
+    _marker: PhantomData<fn() -> (Req, Res)>,
 }
 
 /// Trait implementation for function based routing where state
 /// is provided to the route function
-pub trait FnRouteStateful<Req, Res, S>: Clone + Send + Sized + 'static {
+pub trait FnRouteStateful<Req, Res, S>: Clone + Send + Sync + Sized + 'static {
     fn handle(self, state: S, packet: Packet) -> RouteFuture;
 }
 
@@ -151,7 +152,7 @@ struct StateFnRouteWrapper<I, Req, Res> {
     /// The inner function router
     inner: I,
     /// Phantom data storage for the request and res types
-    _marker: PhantomData<(Req, Res)>,
+    _marker: PhantomData<fn() -> (Req, Res)>,
 }
 
 impl<I, Req, Res, S> Route<S> for StateFnRouteWrapper<I, Req, Res>
@@ -178,7 +179,7 @@ where
 /// in a request value
 impl<F, Fut, Req, Res, S> FnRouteStateful<Req, Res, S> for F
 where
-    F: FnOnce(S, Req) -> Fut + Clone + Send + 'static,
+    F: FnOnce(S, Req) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Req: Decodable + Send + 'static,
     Res: IntoResponse,
@@ -197,7 +198,7 @@ where
 /// require request
 impl<F, Fut, Res, S> FnRouteStateful<(), Res, S> for F
 where
-    F: FnOnce(S) -> Fut + Clone + Send + 'static,
+    F: FnOnce(S) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Res: IntoResponse,
     S: Send + 'static,
@@ -210,11 +211,12 @@ where
     }
 }
 
-impl<I, Req, Res, S: Send> Route<S> for FnRouteWrapper<I, Req, Res>
+impl<I, Req, Res, S> Route<S> for FnRouteWrapper<I, Req, Res>
 where
     I: FnRoute<Req, Res>,
     Req: Send + 'static,
     Res: Send + 'static,
+    S: Send + 'static,
 {
     fn handle(&self, _state: S, packet: Packet) -> RouteFuture {
         let handler = self.inner.clone();
@@ -233,7 +235,7 @@ where
 /// in a request value
 impl<F, Fut, Req, Res> FnRoute<Req, Res> for F
 where
-    F: FnOnce(Req) -> Fut + Clone + Send + 'static,
+    F: FnOnce(Req) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Req: Decodable + Send + 'static,
     Res: IntoResponse,
@@ -251,7 +253,7 @@ where
 /// require request
 impl<F, Fut, Res> FnRoute<(), Res> for F
 where
-    F: FnOnce() -> Fut + Clone + Send + 'static,
+    F: FnOnce() -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Res: IntoResponse,
 {
