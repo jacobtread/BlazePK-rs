@@ -51,7 +51,7 @@ where
     where
         R: FnRoute<Req, Res>,
         Req: Send + 'static,
-        Res: Send + 'static,
+        Res: 'static,
     {
         self.routes.insert(
             component,
@@ -71,7 +71,7 @@ where
     where
         R: FnRouteStateful<Req, Res, S>,
         Req: Send + 'static,
-        Res: Send + 'static,
+        Res: 'static,
     {
         self.routes.insert(
             component,
@@ -181,7 +181,7 @@ impl<I, Req, Res, S> Route<S> for StateFnRouteWrapper<I, Req, Res>
 where
     I: FnRouteStateful<Req, Res, S>,
     Req: Send + 'static,
-    Res: Send + 'static,
+    Res: 'static,
     S: Send + 'static,
 {
     fn handle(&self, state: S, packet: Packet) -> RouteFuture {
@@ -203,7 +203,7 @@ impl<I, Req, Res, S> Route<S> for FnRouteWrapper<I, Req, Res>
 where
     I: FnRoute<Req, Res>,
     Req: Send + 'static,
-    Res: Send + 'static,
+    Res: 'static,
     S: Send + 'static,
 {
     fn handle(&self, _state: S, packet: Packet) -> RouteFuture {
