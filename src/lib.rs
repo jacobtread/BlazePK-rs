@@ -1,7 +1,7 @@
 //! Rust implementation of the Blaze packet system
 pub mod codec;
 pub mod error;
-pub mod macros;
+mod macros;
 pub mod packet;
 pub mod reader;
 pub mod router;

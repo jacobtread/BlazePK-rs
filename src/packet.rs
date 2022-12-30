@@ -668,12 +668,16 @@ pub trait IntoResponse {
     fn into_response(self, req: Packet) -> Packet;
 }
 
+/// Empty response implementation for unit types to allow
+/// functions to have no return type
 impl IntoResponse for () {
     fn into_response(self, req: Packet) -> Packet {
         req.respond_empty()
     }
 }
 
+/// Into response imeplementation for encodable responses
+/// which just calls res.respond
 impl<E> IntoResponse for E
 where
     E: Encodable,
@@ -683,6 +687,8 @@ where
     }
 }
 
+/// Into response implementation on result turning whichever
+/// portion of the result into a response
 impl<S, E> IntoResponse for Result<S, E>
 where
     S: IntoResponse,
@@ -696,6 +702,8 @@ where
     }
 }
 
+/// Into response implementation for option type turning
+/// None responses into an empty response
 impl<S> IntoResponse for Option<S>
 where
     S: IntoResponse,
