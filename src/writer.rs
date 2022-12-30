@@ -244,7 +244,7 @@ impl TdfWriter {
         tag: &[u8],
         key: u8,
         value_tag: &[u8],
-        value: C,
+        value: &C,
     ) {
         self.tag_union_start(tag, key);
         self.tag(value_tag, C::value_type());
@@ -718,7 +718,7 @@ mod test {
         assert_eq!(writer.buffer[4], UNION_UNSET);
         writer.clear();
 
-        writer.tag_union_value(b"TEST", 5, b"TEST2", 15);
+        writer.tag_union_value(b"TEST", 5, b"TEST2", &15);
         assert_eq!(writer.buffer.len(), 10);
         assert_eq!(writer.buffer[3], TdfType::Union.value());
         assert_eq!(writer.buffer[4], 5);
