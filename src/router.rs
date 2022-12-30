@@ -1,10 +1,9 @@
-use std::{collections::HashMap, future::Future, marker::PhantomData, pin::Pin};
-
 use crate::{
     codec::Decodable,
     error::DecodeResult,
     packet::{IntoResponse, Packet, PacketComponents},
 };
+use std::{collections::HashMap, future::Future, marker::PhantomData, pin::Pin};
 
 /// Router for routing packets based on their component and command values
 ///
@@ -15,6 +14,9 @@ pub struct Router<C = (), S = ()> {
     routes: HashMap<C, BoxedRoute<S>>,
 }
 
+/// Routers can be cloned but they also implement send and sync
+/// so they can be used behind a shared reference instead of
+/// cloning
 impl<C, S> Clone for Router<C, S>
 where
     C: Clone,
@@ -113,6 +115,8 @@ impl<S> Clone for BoxedRoute<S> {
     }
 }
 /// Route implementation which handles an incoming packet along with the
+///
+/// `S` The associated state type
 trait Route<S>: Send + Sync {
     /// Route handle function takes in the state and the packet to handle
     /// returning a future which resolves to the response
@@ -126,35 +130,53 @@ trait Route<S>: Send + Sync {
 }
 
 /// Trait implementation for function based routing
+///
+/// `Req` The associated request type
+/// `Res` The associated response type
 pub trait FnRoute<Req, Res>: Clone + Send + Sync + Sized + 'static {
+    /// Handle function for calling the inner fn of the
+    /// route in order to produce the future
+    ///
+    /// `packet` The packet to handle
     fn handle(self, packet: Packet) -> RouteFuture;
+}
+
+/// Trait implementation for function based routing where state
+/// is provided to the route function
+///
+/// `Req` The associated request type
+/// `Res` The associated response type
+/// `S`   The associated state type
+pub trait FnRouteStateful<Req, Res, S>: Clone + Send + Sync + Sized + 'static {
+    /// Handle function for calling the inner fn of the
+    /// route in order to produce the future
+    ///
+    /// `state`  The supplied state
+    /// `packet` The packet to handle
+    fn handle(self, state: S, packet: Packet) -> RouteFuture;
 }
 
 /// Wrapper for function routes that allow them to implement the
 /// route trait to handle routes using the underlying route fn
 struct FnRouteWrapper<I, Req, Res> {
-    /// The inner function router
+    /// The inner function route
     inner: I,
     /// Phantom data storage for the request and res types
     _marker: PhantomData<fn() -> (Req, Res)>,
-}
-
-/// Trait implementation for function based routing where state
-/// is provided to the route function
-pub trait FnRouteStateful<Req, Res, S>: Clone + Send + Sync + Sized + 'static {
-    fn handle(self, state: S, packet: Packet) -> RouteFuture;
 }
 
 /// Wrapper for function routes that allow them to implement the
 /// route trait to handle routes using the underlying route fn
 /// which needs state
 struct StateFnRouteWrapper<I, Req, Res> {
-    /// The inner function router
+    /// The inner function route
     inner: I,
     /// Phantom data storage for the request and res types
     _marker: PhantomData<fn() -> (Req, Res)>,
 }
 
+/// Route implementation for FnRouteWrapper to allow the inner handler
+/// to be used as a routing function
 impl<I, Req, Res, S> Route<S> for StateFnRouteWrapper<I, Req, Res>
 where
     I: FnRouteStateful<Req, Res, S>,
@@ -175,42 +197,8 @@ where
     }
 }
 
-/// Handling for function routes that require state and take
-/// in a request value
-impl<F, Fut, Req, Res, S> FnRouteStateful<Req, Res, S> for F
-where
-    F: FnOnce(S, Req) -> Fut + Clone + Send + Sync + 'static,
-    Fut: Future<Output = Res> + Send + 'static,
-    Req: Decodable + Send + 'static,
-    Res: IntoResponse,
-    S: Send + 'static,
-{
-    fn handle(self, state: S, packet: Packet) -> RouteFuture {
-        Box::pin(async move {
-            let req: Req = packet.decode()?;
-            let res: Res = self(state, req).await;
-            Ok(res.into_response(packet))
-        })
-    }
-}
-
-/// Handling for function routes that require state but don't
-/// require request
-impl<F, Fut, Res, S> FnRouteStateful<(), Res, S> for F
-where
-    F: FnOnce(S) -> Fut + Clone + Send + Sync + 'static,
-    Fut: Future<Output = Res> + Send + 'static,
-    Res: IntoResponse,
-    S: Send + 'static,
-{
-    fn handle(self, state: S, packet: Packet) -> RouteFuture {
-        Box::pin(async move {
-            let res: Res = self(state).await;
-            Ok(res.into_response(packet))
-        })
-    }
-}
-
+/// Route implementation for FnRouteWrapper to allow the inner handler
+/// to be used as a routing function
 impl<I, Req, Res, S> Route<S> for FnRouteWrapper<I, Req, Res>
 where
     I: FnRoute<Req, Res>,
@@ -233,6 +221,61 @@ where
 
 /// Handling for function routes that require state and take
 /// in a request value
+///
+/// ```
+/// async fn example_route(state: State, req: SomeType) -> ReturnType {
+///
+/// }
+/// ```
+impl<F, Fut, Req, Res, S> FnRouteStateful<Req, Res, S> for F
+where
+    F: FnOnce(S, Req) -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = Res> + Send + 'static,
+    Req: Decodable + Send + 'static,
+    Res: IntoResponse,
+    S: Send + 'static,
+{
+    fn handle(self, state: S, packet: Packet) -> RouteFuture {
+        Box::pin(async move {
+            let req: Req = packet.decode()?;
+            let res: Res = self(state, req).await;
+            Ok(res.into_response(packet))
+        })
+    }
+}
+
+/// Handling for function routes that require state but don't
+/// require request
+///
+/// ```
+/// async fn example_route(state: State, req) -> ReturnType {
+///
+/// }
+/// ```
+impl<F, Fut, Res, S> FnRouteStateful<(), Res, S> for F
+where
+    F: FnOnce(S) -> Fut + Clone + Send + Sync + 'static,
+    Fut: Future<Output = Res> + Send + 'static,
+    Res: IntoResponse,
+    S: Send + 'static,
+{
+    fn handle(self, state: S, packet: Packet) -> RouteFuture {
+        Box::pin(async move {
+            let res: Res = self(state).await;
+            Ok(res.into_response(packet))
+        })
+    }
+}
+
+/// Handling for function routes that require state and take
+/// in a request value
+///
+/// ```
+/// async fn example_route(req: SomeType) -> ReturnType {
+///
+/// }
+/// ```
+///
 impl<F, Fut, Req, Res> FnRoute<Req, Res> for F
 where
     F: FnOnce(Req) -> Fut + Clone + Send + Sync + 'static,
@@ -251,6 +294,13 @@ where
 
 /// Handling for function routes that require state but don't
 /// require request
+///
+/// ```
+/// async fn example_route() -> ReturnType {
+///
+/// }
+/// ```
+///
 impl<F, Fut, Res> FnRoute<(), Res> for F
 where
     F: FnOnce() -> Fut + Clone + Send + Sync + 'static,
