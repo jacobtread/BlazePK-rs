@@ -41,7 +41,7 @@ macro_rules! define_components {
             }
         )*
     ) => {
-        #[derive(Debug, Clone, Eq, PartialEq)]
+        #[derive(Debug, Clone)]
         pub enum Components {
             $($component($component),)*
             Unknown(u16, u16)
@@ -70,7 +70,7 @@ macro_rules! define_components {
         }
 
         $(
-            #[derive(Debug, Clone, Eq, PartialEq)]
+            #[derive(Debug, Clone)]
             pub enum $component {
                 $($command,)*
                 $($($command_notify,)*)?
@@ -113,5 +113,14 @@ macro_rules! define_components {
             }
         }
 
+        /// Partial equality using the values for the component
+        impl PartialEq for Components {
+            fn eq(&self, other: &Self) -> bool {
+                use $crate::packet::PacketComponents;
+                self.values() == other.values()
+            }
+        }
+
+        impl Eq for Components {}
     };
 }

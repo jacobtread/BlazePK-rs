@@ -12,7 +12,7 @@ use std::{fmt::Debug, hash::Hash};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 /// Trait for implementing packet target details
-pub trait PacketComponent: Debug + Eq + PartialEq {
+pub trait PacketComponent: Debug {
     // Converts the component command value into its u16 value
     fn command(&self) -> u16;
 
@@ -26,7 +26,7 @@ pub trait PacketComponent: Debug + Eq + PartialEq {
 
 /// Trait implemented by packet components for converting them into
 /// values and finding values from components
-pub trait PacketComponents: Debug + Eq + PartialEq + Sized + Hash {
+pub trait PacketComponents: Debug + Eq + Sized + Hash {
     /// Converts the packet component into the ID of the
     /// component, and command
     fn values(&self) -> (u16, u16);
