@@ -8,11 +8,11 @@ Rust library for working with the Blaze packet system this is the networking sol
 Mass Effect 3, Battlefield 3, another Other EA games. 
 
 ## Crate Features
-- default *Default features are sync and blaze-ssl*
+- default *Default features are async and serde*
 - sync *Provides functions for syncronously writing and reading packets*
 - serde *Provides serialize implementations for the types*
 - async *Provides functions for asyncronously writing and reading packets through tokio*
-- blaze-ssl *Provides functions for asyncronously writing and reading packets through Blaze-SSL streams*
+
 
 # 📌 EA / BioWare Notice
 
