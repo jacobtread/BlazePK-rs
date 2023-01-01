@@ -637,6 +637,8 @@ impl<'a> TdfReader<'a> {
                     }
                     out.push('\n')
                 }
+                out.push_str(&"  ".repeat(indent));
+                out.push('}');
             }
             TdfType::Union => {
                 let ty = self.read_byte()?;
