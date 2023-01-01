@@ -47,39 +47,12 @@ where
     ///
     /// `component` The route component
     /// `route`     The route function
-    pub fn route<R, Req, Res>(&mut self, component: C, route: R) -> &mut Self
+    pub fn route<R, Args>(&mut self, component: C, route: R) -> &mut Self
     where
-        R: FnRoute<Req, Res>,
-        Req: Send + 'static,
-        Res: 'static,
+        R: IntoRoute<S, Args>,
     {
-        self.routes.insert(
-            component,
-            BoxedRoute(Box::new(FnRouteWrapper {
-                inner: route,
-                _marker: PhantomData,
-            })),
-        );
-        self
-    }
-
-    /// Adds a new route that requires state to be provided
-    ///
-    /// `component` The route component
-    /// `route`     The route function
-    pub fn route_stateful<R, Req, Res>(&mut self, component: C, route: R) -> &mut Self
-    where
-        R: FnRouteStateful<Req, Res, S>,
-        Req: Send + 'static,
-        Res: 'static,
-    {
-        self.routes.insert(
-            component,
-            BoxedRoute(Box::new(StateFnRouteWrapper {
-                inner: route,
-                _marker: PhantomData,
-            })),
-        );
+        self.routes
+            .insert(component, BoxedRoute(route.into_route()));
         self
     }
 
@@ -117,7 +90,7 @@ impl<S> Clone for BoxedRoute<S> {
 /// Route implementation which handles an incoming packet along with the
 ///
 /// `S` The associated state type
-trait Route<S>: Send + Sync {
+pub trait Route<S>: Send + Sync {
     /// Route handle function takes in the state and the packet to handle
     /// returning a future which resolves to the response
     ///
@@ -129,92 +102,35 @@ trait Route<S>: Send + Sync {
     fn boxed_clone(&self) -> Box<dyn Route<S>>;
 }
 
-/// Trait implementation for function based routing
-///
-/// `Req` The associated request type
-/// `Res` The associated response type
-pub trait FnRoute<Req, Res>: Clone + Send + Sync + Sized + 'static {
-    /// Handle function for calling the inner fn of the
-    /// route in order to produce the future
-    ///
-    /// `packet` The packet to handle
-    fn handle(self, packet: Packet) -> RouteFuture;
+pub trait IntoRoute<S, T> {
+    fn into_route(self) -> Box<dyn Route<S>>;
 }
 
-/// Trait implementation for function based routing where state
-/// is provided to the route function
-///
-/// `Req` The associated request type
-/// `Res` The associated response type
-/// `S`   The associated state type
-pub trait FnRouteStateful<Req, Res, S>: Clone + Send + Sync + Sized + 'static {
-    /// Handle function for calling the inner fn of the
-    /// route in order to produce the future
-    ///
-    /// `state`  The supplied state
-    /// `packet` The packet to handle
-    fn handle(self, state: S, packet: Packet) -> RouteFuture;
-}
-
-/// Wrapper for function routes that allow them to implement the
-/// route trait to handle routes using the underlying route fn
-struct FnRouteWrapper<I, Req, Res> {
-    /// The inner function route
-    inner: I,
-    /// Phantom data storage for the request and res types
-    _marker: PhantomData<fn() -> (Req, Res)>,
-}
-
-/// Wrapper for function routes that allow them to implement the
-/// route trait to handle routes using the underlying route fn
-/// which needs state
-struct StateFnRouteWrapper<I, Req, Res> {
-    /// The inner function route
-    inner: I,
-    /// Phantom data storage for the request and res types
-    _marker: PhantomData<fn() -> (Req, Res)>,
-}
-
-/// Route implementation for FnRouteWrapper to allow the inner handler
-/// to be used as a routing function
-impl<I, Req, Res, S> Route<S> for StateFnRouteWrapper<I, Req, Res>
+struct FnRoute<I, S, Req, Res>
 where
-    I: FnRouteStateful<Req, Res, S>,
-    Req: Send + 'static,
+    I: FnOnce(S, Packet) -> RouteFuture + Clone + Send + Sync + Sized + 'static,
+{
+    /// The inner function route
+    inner: I,
+    /// Phantom data storage for the request and res types
+    _marker: PhantomData<fn(S) -> (Req, Res)>,
+}
+
+impl<I, S, Req, Res> Route<S> for FnRoute<I, S, Req, Res>
+where
+    I: FnOnce(S, Packet) -> RouteFuture + Clone + Send + Sync + Sized + 'static,
+    Req: 'static,
     Res: 'static,
     S: Send + 'static,
 {
     fn handle(&self, state: S, packet: Packet) -> RouteFuture {
-        let handler = self.inner.clone();
-        Box::pin(handler.handle(state, packet))
+        self.inner.clone()(state, packet)
     }
 
     fn boxed_clone(&self) -> Box<dyn Route<S>> {
-        Box::new(StateFnRouteWrapper {
+        Box::new(FnRoute {
             inner: self.inner.clone(),
-            _marker: PhantomData,
-        })
-    }
-}
-
-/// Route implementation for FnRouteWrapper to allow the inner handler
-/// to be used as a routing function
-impl<I, Req, Res, S> Route<S> for FnRouteWrapper<I, Req, Res>
-where
-    I: FnRoute<Req, Res>,
-    Req: Send + 'static,
-    Res: 'static,
-    S: Send + 'static,
-{
-    fn handle(&self, _state: S, packet: Packet) -> RouteFuture {
-        let handler = self.inner.clone();
-        Box::pin(handler.handle(packet))
-    }
-
-    fn boxed_clone(&self) -> Box<dyn Route<S>> {
-        Box::new(FnRouteWrapper {
-            inner: self.inner.clone(),
-            _marker: PhantomData,
+            _marker: PhantomData as PhantomData<fn(S) -> (Req, Res)>,
         })
     }
 }
@@ -227,19 +143,24 @@ where
 ///
 /// }
 /// ```
-impl<F, Fut, Req, Res, S> FnRouteStateful<Req, Res, S> for F
+impl<F, Fut, Req, Res, S> IntoRoute<S, (S, Req, Res)> for F
 where
     F: FnOnce(S, Req) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Req: Decodable + Send + 'static,
-    Res: IntoResponse,
+    Res: IntoResponse + 'static,
     S: Send + 'static,
 {
-    fn handle(self, state: S, packet: Packet) -> RouteFuture {
-        Box::pin(async move {
-            let req: Req = packet.decode()?;
-            let res: Res = self(state, req).await;
-            Ok(res.into_response(packet))
+    fn into_route(self) -> Box<dyn Route<S>> {
+        Box::new(FnRoute {
+            inner: move |state, packet| {
+                Box::pin(async move {
+                    let req: Req = packet.decode()?;
+                    let res: Res = self(state, req).await;
+                    Ok(res.into_response(packet))
+                })
+            },
+            _marker: PhantomData as PhantomData<fn(S) -> (Req, Res)>,
         })
     }
 }
@@ -252,17 +173,22 @@ where
 ///
 /// }
 /// ```
-impl<F, Fut, Res, S> FnRouteStateful<(), Res, S> for F
+impl<F, Fut, Res, S> IntoRoute<S, (S, (), Res)> for F
 where
     F: FnOnce(S) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
-    Res: IntoResponse,
+    Res: IntoResponse + 'static,
     S: Send + 'static,
 {
-    fn handle(self, state: S, packet: Packet) -> RouteFuture {
-        Box::pin(async move {
-            let res: Res = self(state).await;
-            Ok(res.into_response(packet))
+    fn into_route(self) -> Box<dyn Route<S>> {
+        Box::new(FnRoute {
+            inner: move |state, packet| {
+                Box::pin(async move {
+                    let res: Res = self(state).await;
+                    Ok(res.into_response(packet))
+                })
+            },
+            _marker: PhantomData as PhantomData<fn(S) -> ((), Res)>,
         })
     }
 }
@@ -276,18 +202,24 @@ where
 /// }
 /// ```
 ///
-impl<F, Fut, Req, Res> FnRoute<Req, Res> for F
+impl<F, Fut, Req, Res, S> IntoRoute<S, (Req, Res)> for F
 where
     F: FnOnce(Req) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Req: Decodable + Send + 'static,
-    Res: IntoResponse,
+    Res: IntoResponse + 'static,
+    S: Send + 'static,
 {
-    fn handle(self, packet: Packet) -> RouteFuture {
-        Box::pin(async move {
-            let req: Req = packet.decode()?;
-            let res: Res = self(req).await;
-            Ok(res.into_response(packet))
+    fn into_route(self) -> Box<dyn Route<S>> {
+        Box::new(FnRoute {
+            inner: move |_state, packet| {
+                Box::pin(async move {
+                    let req: Req = packet.decode()?;
+                    let res: Res = self(req).await;
+                    Ok(res.into_response(packet))
+                })
+            },
+            _marker: PhantomData as PhantomData<fn(S) -> (Req, Res)>,
         })
     }
 }
@@ -301,16 +233,22 @@ where
 /// }
 /// ```
 ///
-impl<F, Fut, Res> FnRoute<(), Res> for F
+impl<F, Fut, Res, S> IntoRoute<S, ((), Res)> for F
 where
     F: FnOnce() -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
-    Res: IntoResponse,
+    Res: IntoResponse + 'static,
+    S: Send + 'static,
 {
-    fn handle(self, packet: Packet) -> RouteFuture {
-        Box::pin(async move {
-            let res: Res = self().await;
-            Ok(res.into_response(packet))
+    fn into_route(self) -> Box<dyn Route<S>> {
+        Box::new(FnRoute {
+            inner: move |_state, packet| {
+                Box::pin(async move {
+                    let res: Res = self().await;
+                    Ok(res.into_response(packet))
+                })
+            },
+            _marker: PhantomData as PhantomData<fn(S) -> ((), Res)>,
         })
     }
 }
