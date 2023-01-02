@@ -661,17 +661,30 @@ impl Packet {
     }
 }
 
+pub trait FromRequest: Sized {
+    fn from_request(req: &Packet) -> DecodeResult<Self>;
+}
+
+impl<D> FromRequest for D
+where
+    D: Decodable,
+{
+    fn from_request(req: &Packet) -> DecodeResult<Self> {
+        req.decode()
+    }
+}
+
 /// Trait for a type that can be converted into a packet
 /// response using the provided req packet
 pub trait IntoResponse {
     /// Into packet conversion
-    fn into_response(self, req: Packet) -> Packet;
+    fn into_response(self, req: &Packet) -> Packet;
 }
 
 /// Empty response implementation for unit types to allow
 /// functions to have no return type
 impl IntoResponse for () {
-    fn into_response(self, req: Packet) -> Packet {
+    fn into_response(self, req: &Packet) -> Packet {
         req.respond_empty()
     }
 }
@@ -682,7 +695,7 @@ impl<E> IntoResponse for E
 where
     E: Encodable,
 {
-    fn into_response(self, req: Packet) -> Packet {
+    fn into_response(self, req: &Packet) -> Packet {
         req.respond(self)
     }
 }
@@ -694,7 +707,7 @@ where
     S: IntoResponse,
     E: IntoResponse,
 {
-    fn into_response(self, req: Packet) -> Packet {
+    fn into_response(self, req: &Packet) -> Packet {
         match self {
             Ok(value) => value.into_response(req),
             Err(value) => value.into_response(req),
@@ -708,7 +721,7 @@ impl<S> IntoResponse for Option<S>
 where
     S: IntoResponse,
 {
-    fn into_response(self, req: Packet) -> Packet {
+    fn into_response(self, req: &Packet) -> Packet {
         match self {
             Some(value) => value.into_response(req),
             None => req.respond_empty(),

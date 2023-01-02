@@ -157,7 +157,7 @@ where
                 Box::pin(async move {
                     let req: Req = packet.decode()?;
                     let res: Res = self(state, req).await;
-                    Ok(res.into_response(packet))
+                    Ok(res.into_response(&packet))
                 })
             },
             _marker: PhantomData as PhantomData<fn(S) -> (Req, Res)>,
@@ -185,7 +185,7 @@ where
             inner: move |state, packet| {
                 Box::pin(async move {
                     let res: Res = self(state).await;
-                    Ok(res.into_response(packet))
+                    Ok(res.into_response(&packet))
                 })
             },
             _marker: PhantomData as PhantomData<fn(S) -> ((), Res)>,
@@ -216,7 +216,7 @@ where
                 Box::pin(async move {
                     let req: Req = packet.decode()?;
                     let res: Res = self(req).await;
-                    Ok(res.into_response(packet))
+                    Ok(res.into_response(&packet))
                 })
             },
             _marker: PhantomData as PhantomData<fn(S) -> (Req, Res)>,
@@ -245,7 +245,7 @@ where
             inner: move |_state, packet| {
                 Box::pin(async move {
                     let res: Res = self().await;
-                    Ok(res.into_response(packet))
+                    Ok(res.into_response(&packet))
                 })
             },
             _marker: PhantomData as PhantomData<fn(S) -> ((), Res)>,
