@@ -703,7 +703,7 @@ pub struct Response(Packet);
 
 impl IntoResponse for Response {
     /// Simply provide the already compute response
-    fn into_response(self, req: &Packet) -> Packet {
+    fn into_response(self, _req: &Packet) -> Packet {
         self.0
     }
 }
