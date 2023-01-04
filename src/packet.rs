@@ -4,10 +4,10 @@ use crate::{
     reader::TdfReader,
 };
 use bytes::Bytes;
-use std::io;
 #[cfg(feature = "sync")]
 use std::io::{Read, Write};
 use std::{fmt::Debug, hash::Hash};
+use std::{io, ops::Deref};
 #[cfg(feature = "async")]
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -668,6 +668,16 @@ pub struct Request<T: FromRequest> {
     pub req: T,
     // The packet header from the request
     pub header: PacketHeader,
+}
+
+/// Deref implementation so that the request fields can be
+/// directly accessed
+impl<T: FromRequest> Deref for Request<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.req
+    }
 }
 
 impl<T: FromRequest> Request<T> {
