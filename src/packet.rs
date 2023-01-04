@@ -661,7 +661,55 @@ impl Packet {
     }
 }
 
+/// Structure wrapping a from request type to include a packet
+/// header to allow the response type to be created
+pub struct Request<T: FromRequest> {
+    // The decoded request type
+    pub req: T,
+    // The packet header from the request
+    pub header: PacketHeader,
+}
+
+impl<T: FromRequest> Request<T> {
+    /// Creates a response from the provided response type value
+    /// returning a Response structure which can be used as a Route
+    /// repsonse
+    ///
+    /// `res` The into response type implementation
+    pub fn response<E>(&self, res: E) -> Response
+    where
+        E: IntoResponse,
+    {
+        Response(res.into_response(&self.header))
+    }
+}
+
+/// Type for route responses that have already been turned into
+/// packets usually for lifetime reasons
+pub struct Response(Packet);
+
+impl IntoResponse for Response {
+    /// Simply provide the already compute response
+    fn into_response(self, _header: &PacketHeader) -> Packet {
+        self.0
+    }
+}
+
+impl<T: FromRequest> FromRequest for Request<T> {
+    fn from_request(req: &Packet) -> DecodeResult<Self> {
+        let inner = T::from_request(req)?;
+        let header = req.header.clone();
+        Ok(Self { req: inner, header })
+    }
+}
+
+/// Trait implementing by structures which can be created from a request
+/// packet and is used for the arguments on routing functions
 pub trait FromRequest: Sized {
+    /// Takes the value from the request returning a decode result of
+    /// whether the value could be created
+    ///
+    /// `req` The request packet
     fn from_request(req: &Packet) -> DecodeResult<Self>;
 }
 
@@ -674,18 +722,29 @@ where
     }
 }
 
+/// From request implementation for unit types in order
+/// to simply ignore the request type
+impl FromRequest for () {
+    fn from_request(_: &Packet) -> DecodeResult<Self> {
+        Ok(())
+    }
+}
+
 /// Trait for a type that can be converted into a packet
-/// response using the provided req packet
+/// response using the header from the request packet
 pub trait IntoResponse {
     /// Into packet conversion
-    fn into_response(self, req: &Packet) -> Packet;
+    fn into_response(self, header: &PacketHeader) -> Packet;
 }
 
 /// Empty response implementation for unit types to allow
 /// functions to have no return type
 impl IntoResponse for () {
-    fn into_response(self, req: &Packet) -> Packet {
-        req.respond_empty()
+    fn into_response(self, header: &PacketHeader) -> Packet {
+        Packet {
+            header: header.response(),
+            contents: Bytes::new(),
+        }
     }
 }
 
@@ -695,8 +754,11 @@ impl<E> IntoResponse for E
 where
     E: Encodable,
 {
-    fn into_response(self, req: &Packet) -> Packet {
-        req.respond(self)
+    fn into_response(self, header: &PacketHeader) -> Packet {
+        Packet {
+            header: header.response(),
+            contents: Bytes::from(self.encode_bytes()),
+        }
     }
 }
 
@@ -707,10 +769,10 @@ where
     S: IntoResponse,
     E: IntoResponse,
 {
-    fn into_response(self, req: &Packet) -> Packet {
+    fn into_response(self, header: &PacketHeader) -> Packet {
         match self {
-            Ok(value) => value.into_response(req),
-            Err(value) => value.into_response(req),
+            Ok(value) => value.into_response(header),
+            Err(value) => value.into_response(header),
         }
     }
 }
@@ -721,10 +783,13 @@ impl<S> IntoResponse for Option<S>
 where
     S: IntoResponse,
 {
-    fn into_response(self, req: &Packet) -> Packet {
+    fn into_response(self, header: &PacketHeader) -> Packet {
         match self {
-            Some(value) => value.into_response(req),
-            None => req.respond_empty(),
+            Some(value) => value.into_response(header),
+            None => Packet {
+                header: header.response(),
+                contents: Bytes::new(),
+            },
         }
     }
 }
