@@ -688,9 +688,12 @@ impl<T: FromRequest> Request<T> {
     /// `res` The into response type implementation
     pub fn response<E>(&self, res: E) -> Response
     where
-        E: IntoResponse,
+        E: Encodable,
     {
-        Response(res.into_response(&self.header))
+        Response(Packet {
+            header: self.header.clone(),
+            contents: Bytes::from(res.encode_bytes()),
+        })
     }
 }
 
@@ -700,7 +703,7 @@ pub struct Response(Packet);
 
 impl IntoResponse for Response {
     /// Simply provide the already compute response
-    fn into_response(self, _header: &PacketHeader) -> Packet {
+    fn into_response(self, req: &Packet) -> Packet {
         self.0
     }
 }
@@ -744,17 +747,14 @@ impl FromRequest for () {
 /// response using the header from the request packet
 pub trait IntoResponse {
     /// Into packet conversion
-    fn into_response(self, header: &PacketHeader) -> Packet;
+    fn into_response(self, req: &Packet) -> Packet;
 }
 
 /// Empty response implementation for unit types to allow
 /// functions to have no return type
 impl IntoResponse for () {
-    fn into_response(self, header: &PacketHeader) -> Packet {
-        Packet {
-            header: header.response(),
-            contents: Bytes::new(),
-        }
+    fn into_response(self, req: &Packet) -> Packet {
+        req.respond_empty()
     }
 }
 
@@ -764,11 +764,8 @@ impl<E> IntoResponse for E
 where
     E: Encodable,
 {
-    fn into_response(self, header: &PacketHeader) -> Packet {
-        Packet {
-            header: header.response(),
-            contents: Bytes::from(self.encode_bytes()),
-        }
+    fn into_response(self, req: &Packet) -> Packet {
+        req.respond(self)
     }
 }
 
@@ -779,10 +776,10 @@ where
     S: IntoResponse,
     E: IntoResponse,
 {
-    fn into_response(self, header: &PacketHeader) -> Packet {
+    fn into_response(self, req: &Packet) -> Packet {
         match self {
-            Ok(value) => value.into_response(header),
-            Err(value) => value.into_response(header),
+            Ok(value) => value.into_response(req),
+            Err(value) => value.into_response(req),
         }
     }
 }
@@ -793,13 +790,10 @@ impl<S> IntoResponse for Option<S>
 where
     S: IntoResponse,
 {
-    fn into_response(self, header: &PacketHeader) -> Packet {
+    fn into_response(self, req: &Packet) -> Packet {
         match self {
-            Some(value) => value.into_response(header),
-            None => Packet {
-                header: header.response(),
-                contents: Bytes::new(),
-            },
+            Some(value) => value.into_response(req),
+            None => req.respond_empty(),
         }
     }
 }

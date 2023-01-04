@@ -54,7 +54,7 @@ where
         let inner = self.clone();
         Ok(Box::pin(async move {
             let res: Res = inner(state, req).await;
-            res.into_response(&packet.header)
+            res.into_response(&packet)
         }))
     }
 }
@@ -78,7 +78,7 @@ where
         let inner = self.clone();
         Ok(Box::pin(async move {
             let res: Res = inner(state).await;
-            res.into_response(&packet.header)
+            res.into_response(&packet)
         }))
     }
 }
@@ -104,7 +104,7 @@ where
         let inner = self.clone();
         Ok(Box::pin(async move {
             let res: Res = inner(req).await;
-            res.into_response(&packet.header)
+            res.into_response(&packet)
         }))
     }
 }
@@ -127,7 +127,7 @@ where
         let inner = self.clone();
         Ok(Box::pin(async move {
             let res: Res = inner().await;
-            res.into_response(&packet.header)
+            res.into_response(&packet)
         }))
     }
 }
