@@ -195,25 +195,6 @@ impl<C: PacketComponents, S: State> Router<C, S> {
             }),
         );
     }
-    /// Adds a new route to the router where the route is something that implements
-    /// the handler type with any lifetime. The value is wrapped with a HandlerRoute
-    /// and stored boxed in the routes map under the component key. This implementation
-    /// requires that the handler implement DeriveComponent
-    ///
-    /// `route`     The actual route handler function
-    pub fn add<T>(&mut self, route: impl for<'a> Handler<'a, S, T> + DeriveComponent<C>)
-    where
-        for<'a> T: 'a,
-    {
-        let component = route.component();
-        self.routes.insert(
-            component,
-            Box::new(HandlerRoute {
-                handler: route,
-                _marker: PhantomData,
-            }),
-        );
-    }
 
     /// Handle function takes the provided packet retrieves the component from its header
     /// and finds the matching route (Returning an empty response immediately if none match)
@@ -230,11 +211,4 @@ impl<C: PacketComponents, S: State> Router<C, S> {
         let response = route.handle(state, packet)?.await;
         Ok(response)
     }
-}
-
-/// Trait implemented by structures where the component can be
-/// derived from it
-pub trait DeriveComponent<C: PacketComponents> {
-    /// Function for retrieving the component
-    fn component(&self) -> C;
 }
