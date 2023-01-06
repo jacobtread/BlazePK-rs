@@ -691,7 +691,7 @@ impl<T: FromRequest> Request<T> {
         E: Encodable,
     {
         Response(Packet {
-            header: self.header.clone(),
+            header: self.header.response(),
             contents: Bytes::from(res.encode_bytes()),
         })
     }
