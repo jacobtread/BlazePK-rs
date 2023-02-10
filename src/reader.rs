@@ -645,7 +645,6 @@ impl<'a> TdfReader<'a> {
                 if ty == UNION_UNSET {
                     out.push_str("Union(Unset)")
                 } else {
-                    out.push_str("Union(");
                     let tag = self.read_tag()?;
                     out.push_str(&format!("Union(\"{}\", {}, ", &tag.0, ty));
                     self.stringify_type(out, indent + 1, &tag.1)?;

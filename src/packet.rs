@@ -797,3 +797,62 @@ where
         }
     }
 }
+
+/// Wrapper over a packet structure to provde debug logging
+/// with names resolved for the component
+pub struct PacketDebug<'a, C> {
+    /// Reference to the packet itself
+    pub packet: &'a Packet,
+    /// The component derived from the packet header
+    pub component: &'a C,
+    /// Decide whether to display the contents of the packet
+    pub minified: bool,
+}
+
+impl<'a, C> Debug for PacketDebug<'a, C>
+where
+    C: PacketComponents,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Append basic header information
+        let header = &self.packet.header;
+        writeln!(f, "Component: {:?}", self.component)?;
+        writeln!(f, "Type: {:?}", header.ty)?;
+
+        if !matches!(&header.ty, PacketType::Notify) {
+            writeln!(f, "ID: {}", &header.id)?;
+        }
+
+        if let PacketType::Error = &header.ty {
+            writeln!(f, "Error: {}", &header.error)?;
+        }
+
+        // Skip remaining if the message shouldn't contain its content
+        if self.minified {
+            return Ok(());
+        }
+
+        let mut reader = TdfReader::new(&self.packet.contents);
+        let mut out = String::new();
+
+        out.push_str("{\n");
+
+        // Stringify the content or append error instead
+        if let Err(err) = reader.stringify(&mut out) {
+            writeln!(f, "Content: Content was malformed")?;
+            writeln!(f, "Error: {:?}", err)?;
+            writeln!(f, "Partial Content: {}", out)?;
+            writeln!(f, "Raw: {:?}", &self.packet.contents)?;
+            return Ok(());
+        }
+
+        if out.len() == 2 {
+            // Remove new line if nothing else was appended
+            out.pop();
+        }
+
+        out.push('}');
+
+        write!(f, "Content: {}", out)
+    }
+}
