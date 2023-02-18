@@ -1,15 +1,12 @@
 use crate::{
-    codec::{decode_u16_be, encode_u16_be, Decodable, Encodable},
+    codec::{Decodable, Encodable},
     error::DecodeResult,
     reader::TdfReader,
 };
-use bytes::Bytes;
-#[cfg(feature = "sync")]
-use std::io::{Read, Write};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::{fmt::Debug, hash::Hash};
 use std::{io, ops::Deref};
-#[cfg(feature = "async")]
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio_util::codec::{Decoder, Encoder};
 
 /// Trait for implementing packet target details
 pub trait PacketComponent: Debug {
@@ -55,26 +52,26 @@ pub trait PacketComponents: Debug + Eq + Sized + Hash {
 /// The different types of packets
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PacketType {
-    /// ID counted request packets
+    /// ID counted request packets (0x00)
     Request,
-    /// Packets responding to requests
+    /// Packets responding to requests (0x10)
     Response,
-    /// Unique packets coming from the server
+    /// Unique packets coming from the server (0x20)
     Notify,
-    /// Error packets
+    /// Error packets (0x30)
     Error,
     /// Packet type that is unknown
-    Unknown(u16),
+    Unknown(u8),
 }
 
 impl PacketType {
     /// Returns the u16 representation of the packet type
-    pub fn value(&self) -> u16 {
+    pub fn value(&self) -> u8 {
         match self {
-            PacketType::Request => 0x0000,
-            PacketType::Response => 0x1000,
-            PacketType::Notify => 0x2000,
-            PacketType::Error => 0x3000,
+            PacketType::Request => 0x00,
+            PacketType::Response => 0x10,
+            PacketType::Notify => 0x20,
+            PacketType::Error => 0x30,
             PacketType::Unknown(value) => *value,
         }
     }
@@ -82,12 +79,12 @@ impl PacketType {
     /// Gets the packet type this value is represented by
     ///
     /// `value` The value to get the type for
-    pub fn from_value(value: u16) -> PacketType {
+    pub fn from_value(value: u8) -> PacketType {
         match value {
-            0x0000 => PacketType::Request,
-            0x1000 => PacketType::Response,
-            0x2000 => PacketType::Notify,
-            0x3000 => PacketType::Error,
+            0x00 => PacketType::Request,
+            0x10 => PacketType::Response,
+            0x20 => PacketType::Notify,
+            0x30 => PacketType::Error,
             value => PacketType::Unknown(value),
         }
     }
@@ -179,61 +176,53 @@ impl PacketHeader {
         self.component.eq(&other.component) && self.command.eq(&other.command)
     }
 
-    /// Encodes the contents of this header to bytes appending those bytes
-    /// to the provided output source
+    /// Encodes the contents of this header appending to the
+    /// output source
     ///
-    /// `output` The output bytes to append to
-    /// `length` The length of the packet contents
-    pub fn write_bytes(&self, output: &mut Vec<u8>, length: usize) {
+    /// `dst`    The dst to append the bytes to
+    /// `length` The length of the content after the header
+    pub fn write(&self, dst: &mut BytesMut, length: usize) {
         let is_extended = length > 0xFFFF;
-        encode_u16_be(&(length as u16), output);
-        encode_u16_be(&self.component, output);
-        encode_u16_be(&self.command, output);
-        encode_u16_be(&self.error, output);
-        output.push((self.ty.value() >> 8) as u8);
-        output.push(if is_extended { 0x10 } else { 0x00 });
-        encode_u16_be(&self.id, output);
+        dst.put_u16(length as u16);
+        dst.put_u16(self.component);
+        dst.put_u16(self.command);
+        dst.put_u16(self.error);
+        dst.put_u8(self.ty.value());
+        dst.put_u8(if is_extended { 0x10 } else { 0x00 });
+        dst.put_u16(self.id);
         if is_extended {
-            output.push(((length & 0xFF000000) >> 24) as u8);
-            output.push(((length & 0x00FF0000) >> 16) as u8);
+            dst.put_u8(((length & 0xFF000000) >> 24) as u8);
+            dst.put_u8(((length & 0x00FF0000) >> 16) as u8);
         }
     }
 
-    /// Wraps the write_bytes function directly with a header buffer
-    /// to encoded directly into bytes without appending to an existing
-    /// one
+    /// Attempts to read the packet header from the provided
+    /// source bytes returning None if there aren't enough bytes
     ///
-    /// `length` The length of the packet contents
-    pub fn encode_bytes(&self, length: usize) -> Vec<u8> {
-        let mut header = Vec::with_capacity(12);
-        self.write_bytes(&mut header, length);
-        header
-    }
-
-    /// Syncronously reads a packet header from the provided input. Returning
-    /// the Packet header as well as the length of the packet.
-    ///
-    /// `input` The input source to read from
-    #[cfg(feature = "sync")]
-    pub fn read<R: Read>(input: &mut R) -> io::Result<(PacketHeader, usize)>
-    where
-        Self: Sized,
-    {
-        let mut header = [0u8; 12];
-        input.read_exact(&mut header)?;
-        let mut length = decode_u16_be(&header[0..2])? as usize;
-        let component = decode_u16_be(&header[2..4])?;
-        let command = decode_u16_be(&header[4..6])?;
-        let error = decode_u16_be(&header[6..8])?;
-        let q_type = decode_u16_be(&header[8..10])?;
-        let id = decode_u16_be(&header[10..12])?;
-        if q_type & 0x10 != 0 {
-            let mut buffer = [0; 2];
-            input.read_exact(&mut buffer)?;
-            let ext_length = u16::from_be_bytes(buffer);
-            length += (ext_length as usize) << 16;
+    /// `src` The bytes to read from
+    pub fn read(src: &mut BytesMut) -> Option<(PacketHeader, usize)> {
+        if src.len() < 12 {
+            return None;
         }
-        let ty = PacketType::from_value(q_type);
+        let mut length = src.get_u16() as usize;
+        let component = src.get_u16();
+        let command = src.get_u16();
+        let error = src.get_u16();
+        let ty = src.get_u8();
+        // If we encounter 0x10 here then the packet contains extended length
+        // bytes so its longer than a u16::MAX length
+        let is_extended = src.get_u8() == 0x10;
+        let id = src.get_u16();
+
+        if is_extended {
+            // We need another two bytes for the extended length
+            if src.len() < 2 {
+                return None;
+            }
+            length += src.get_u16() as usize;
+        }
+
+        let ty = PacketType::from_value(ty);
         let header = PacketHeader {
             component,
             command,
@@ -241,43 +230,7 @@ impl PacketHeader {
             ty,
             id,
         };
-        Ok((header, length))
-    }
-
-    /// Asyncronously reads a packet header from the provided AsyncRead input.
-    /// Returning the Packet header as well as the length of the packet.
-    ///
-    /// `input` The input to read from
-    #[cfg(feature = "async")]
-    pub async fn read_async<R: AsyncRead + Unpin>(
-        input: &mut R,
-    ) -> io::Result<(PacketHeader, usize)>
-    where
-        Self: Sized,
-    {
-        let mut header = [0u8; 12];
-        input.read_exact(&mut header).await?;
-        let mut length = decode_u16_be(&header[0..2])? as usize;
-        let component = decode_u16_be(&header[2..4])?;
-        let command = decode_u16_be(&header[4..6])?;
-        let error = decode_u16_be(&header[6..8])?;
-        let q_type = decode_u16_be(&header[8..10])?;
-        let id = decode_u16_be(&header[10..12])?;
-        if q_type & 0x10 != 0 {
-            let mut buffer = [0; 2];
-            input.read_exact(&mut buffer).await?;
-            let ext_length = u16::from_be_bytes(buffer);
-            length += (ext_length as usize) << 16;
-        }
-        let ty = PacketType::from_value(q_type);
-        let header = PacketHeader {
-            component,
-            command,
-            error,
-            ty,
-            id,
-        };
-        Ok((header, length))
+        Some((header, length))
     }
 }
 
@@ -525,139 +478,42 @@ impl Packet {
         C::decode(&mut reader)
     }
 
-    /// Syncronously reads a packet from the provided readable input
-    /// returning the packet that was read
-    ///
-    /// `input` The input source to read from
-    #[cfg(feature = "sync")]
-    pub fn read<R: Read>(input: &mut R) -> io::Result<Self>
-    where
-        Self: Sized,
-    {
-        let (header, length) = PacketHeader::read(input)?;
-        let mut contents = vec![0u8; length];
-        input.read_exact(&mut contents)?;
-        Ok(Self {
+    pub fn read(src: &mut BytesMut) -> Option<Self> {
+        let (header, length) = PacketHeader::read(src)?;
+        if src.len() < length {
+            return None;
+        }
+        let contents = src.split_to(length);
+        Some(Self {
             header,
-            contents: Bytes::from(contents),
+            contents: contents.freeze(),
         })
     }
 
-    /// Asyncronously reads a packet from the provided input returning
-    /// the packet that was read.
-    ///
-    /// `input` The input source to read from
-    #[cfg(feature = "async")]
-    pub async fn read_async<R: AsyncRead + Unpin>(input: &mut R) -> io::Result<Self>
-    where
-        Self: Sized,
-    {
-        let (header, length) = PacketHeader::read_async(input).await?;
-        let mut contents = vec![0u8; length];
-        input.read_exact(&mut contents).await?;
-        Ok(Self {
-            header,
-            contents: Bytes::from(contents),
-        })
-    }
-
-    /// Syncronously reads a packet from the provided readable input
-    /// returning the packet that was read along and also decodes
-    /// the component using the provided `T` and returns that aswell
-    ///
-    /// `input` The input source to read from
-    #[cfg(feature = "sync")]
-    pub fn read_typed<T: PacketComponents, R: Read>(input: &mut R) -> io::Result<(T, Self)>
-    where
-        Self: Sized,
-    {
-        let (header, length) = PacketHeader::read(input)?;
-        let mut contents = vec![0u8; length];
-        input.read_exact(&mut contents)?;
-        let component = T::from_header(&header);
-        Ok((
-            component,
-            Self {
-                header,
-                contents: Bytes::from(contents),
-            },
-        ))
-    }
-
-    /// Reads a packet from the provided input without parsing
-    /// the contents of the packet
-    ///
-    /// `input` The input source to read from
-    #[cfg(feature = "async")]
-    pub async fn read_async_typed<T: PacketComponents, R: AsyncRead + Unpin>(
-        input: &mut R,
-    ) -> io::Result<(T, Self)>
-    where
-        Self: Sized,
-    {
-        let (header, length) = PacketHeader::read_async(input).await?;
-        let mut contents = vec![0u8; length];
-        input.read_exact(&mut contents).await?;
-        let component = T::from_header(&header);
-        Ok((
-            component,
-            Self {
-                header,
-                contents: Bytes::from(contents),
-            },
-        ))
-    }
-
-    /// Handles writing the header and contents of this packet to
-    /// the Writable object
-    ///
-    /// `output` The output source to write to
-    #[cfg(feature = "sync")]
-    pub fn write<W: Write>(&self, output: &mut W) -> io::Result<()>
-    where
-        Self: Sized,
-    {
+    pub fn write(&self, dst: &mut BytesMut) {
         let contents = &self.contents;
-        let header = self.header.encode_bytes(contents.len());
-        output.write_all(&header)?;
-        output.write_all(contents)?;
+        self.header.write(dst, contents.len());
+        dst.extend_from_slice(contents);
+    }
+}
+
+pub struct PacketCodec;
+
+impl Decoder for PacketCodec {
+    type Error = io::Error;
+    type Item = Packet;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        Ok(Packet::read(src))
+    }
+}
+
+impl Encoder<Packet> for PacketCodec {
+    type Error = io::Error;
+
+    fn encode(&mut self, item: Packet, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        item.write(dst);
         Ok(())
-    }
-
-    /// Handles writing the header and contents of this packet to
-    /// the Writable object
-    ///
-    /// `output` The output source to write to
-    #[cfg(feature = "async")]
-    pub async fn write_async<W: AsyncWrite + Unpin>(&self, output: &mut W) -> io::Result<()>
-    where
-        Self: Sized,
-    {
-        let content = &self.contents;
-        let header = self.header.encode_bytes(content.len());
-        output.write_all(&header).await?;
-        output.write_all(content).await?;
-        Ok(())
-    }
-
-    /// Appends the header and contents of this packet to the provided output
-    /// Vec of bytes.
-    ///
-    /// `output` The output vec to append the bytes to
-    pub fn write_bytes(&self, output: &mut Vec<u8>) {
-        let content = &self.contents;
-        let length = content.len();
-        self.header.write_bytes(output, length);
-        output.extend_from_slice(content);
-    }
-
-    /// Encodes this packet header and contents into a Vec. Vec may be
-    /// over allocated by 2 bytes to prevent reallocation for longer
-    /// packets.
-    pub fn encode_bytes(&self) -> Vec<u8> {
-        let mut output = Vec::with_capacity(14 + self.contents.len());
-        self.write_bytes(&mut output);
-        output
     }
 }
 
