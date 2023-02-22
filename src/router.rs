@@ -1,9 +1,15 @@
 use crate::{
-    error::DecodeResult,
+    error::{DecodeError, DecodeResult},
     packet::{FromRequest, IntoResponse, Packet, PacketComponents},
 };
 
-use std::{collections::HashMap, future::Future, marker::PhantomData, pin::Pin};
+use std::{
+    collections::HashMap,
+    future::Future,
+    marker::PhantomData,
+    pin::Pin,
+    task::{ready, Context, Poll},
+};
 
 /// Empty type used for representing nothing used because the
 /// Unit type has trait implementations that will conflict with
@@ -15,23 +21,40 @@ pub struct Nil;
 /// the handlers
 pub trait State: Send + 'static {}
 
+/// Wrapper of the from request trait to include the Nil type
+pub trait FromRequestWrapper: Sized + 'static {
+    fn from_request(req: &Packet) -> DecodeResult<Self>;
+}
+
+impl FromRequestWrapper for Nil {
+    fn from_request(_req: &Packet) -> DecodeResult<Self> {
+        Ok(Nil)
+    }
+}
+
+impl<F: FromRequest> FromRequestWrapper for F {
+    fn from_request(req: &Packet) -> DecodeResult<Self> {
+        F::from_request(req)
+    }
+}
+
 /// Trait implemented by things that can be used to handler a packet from
 /// the router and return a future to a response packet.
 ///
 /// Implements the actual calls the underlying functions in the handle
 /// function along with mapping of the request and repsonse types.
-pub trait Handler<'a, S, T>: Send + Sync + 'static {
+pub trait Handler<'a, S, Si, Req, Res>: Clone + Send + Sync + 'static {
     /// Handle function for calling the underlying handle logic using
     /// the proivded state and packet
     ///
     /// `state`  The state to provide
     /// `packet` The packet to handle
-    fn handle(&self, state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>>;
+    fn handle(self, state: &'a mut S, req: Req) -> BoxFuture<'a, Res>;
 }
 
 /// Future which results in a response packet being produced that can
 /// only live for the lifetime of 'a which is the state lifetime
-pub type PacketFuture<'a> = Pin<Box<dyn Future<Output = Packet> + Send + 'a>>;
+type PacketFuture<'a> = BoxFuture<'a, Packet>;
 
 /// Handler implementation for async functions that take the state as well
 /// as a request type
@@ -41,21 +64,16 @@ pub type PacketFuture<'a> = Pin<Box<dyn Future<Output = Packet> + Send + 'a>>;
 ///
 /// }
 /// ```
-impl<'a, S, Fun, Fut, Req, Res> Handler<'a, S, (S, Req, Res)> for Fun
+impl<'a, S, Fun, Fut, Req, Res> Handler<'a, S, S, Req, Res> for Fun
 where
     Fun: FnOnce(&'a mut S, Req) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
-    Req: FromRequest + Send + 'a,
-    Res: IntoResponse + 'a,
+    Req: FromRequest,
+    Res: IntoResponse,
     S: State,
 {
-    fn handle(&self, state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
-        let req: Req = FromRequest::from_request(&packet)?;
-        let inner = self.clone();
-        Ok(Box::pin(async move {
-            let res: Res = inner(state, req).await;
-            res.into_response(&packet)
-        }))
+    fn handle(self, state: &'a mut S, req: Req) -> BoxFuture<'a, Res> {
+        Box::pin(self(state, req))
     }
 }
 
@@ -67,19 +85,15 @@ where
 ///
 /// }
 /// ```
-impl<'a, S, Fun, Fut, Res> Handler<'a, S, (S, Nil, Res)> for Fun
+impl<'a, S, Fun, Fut, Res> Handler<'a, S, S, Nil, Res> for Fun
 where
     Fun: FnOnce(&'a mut S) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
-    Res: IntoResponse + 'a,
+    Res: IntoResponse,
     S: State,
 {
-    fn handle(&self, state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
-        let inner = self.clone();
-        Ok(Box::pin(async move {
-            let res: Res = inner(state).await;
-            res.into_response(&packet)
-        }))
+    fn handle(self, state: &'a mut S, _: Nil) -> BoxFuture<'a, Res> {
+        Box::pin(self(state))
     }
 }
 
@@ -91,21 +105,16 @@ where
 ///
 /// }
 /// ```
-impl<'a, S, Fun, Fut, Req, Res> Handler<'a, S, (Nil, Req, Res)> for Fun
+impl<'a, S, Fun, Fut, Req, Res> Handler<'a, S, Nil, Req, Res> for Fun
 where
     Fun: FnOnce(Req) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
-    Req: FromRequest + Send + 'a,
-    Res: IntoResponse + 'a,
+    Req: FromRequest,
+    Res: IntoResponse,
     S: State,
 {
-    fn handle(&self, _state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
-        let req: Req = FromRequest::from_request(&packet)?;
-        let inner = self.clone();
-        Ok(Box::pin(async move {
-            let res: Res = inner(req).await;
-            res.into_response(&packet)
-        }))
+    fn handle(self, _state: &'a mut S, req: Req) -> BoxFuture<'a, Res> {
+        Box::pin(self(req))
     }
 }
 
@@ -116,60 +125,106 @@ where
 ///
 /// }
 /// ```
-impl<'a, S, Fun, Fut, Res> Handler<'a, S, (Nil, Nil, Res)> for Fun
+impl<'a, S, Fun, Fut, Res> Handler<'a, S, Nil, Nil, Res> for Fun
 where
     Fun: FnOnce() -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
-    Res: IntoResponse + 'a,
+    Res: IntoResponse,
     S: State,
 {
-    fn handle(&self, _state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
-        let inner = self.clone();
-        Ok(Box::pin(async move {
-            let res: Res = inner().await;
-            res.into_response(&packet)
-        }))
+    fn handle(self, _state: &'a mut S, _: Nil) -> BoxFuture<'a, Res> {
+        Box::pin(self())
+    }
+}
+
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+struct HandlerFuture<'a, Res> {
+    fut: BoxFuture<'a, Res>,
+    packet: Packet,
+}
+
+impl<'a, Res> Future for HandlerFuture<'a, Res>
+where
+    Res: IntoResponse,
+{
+    type Output = Packet;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        let fut = Pin::new(&mut this.fut);
+        let res = ready!(fut.poll(cx));
+        let packet = res.into_response(&this.packet);
+        Poll::Ready(packet)
     }
 }
 
 /// Trait for erasing the inner types of the handler routes
-pub trait Route<'a, S>: Send + Sync {
+trait Route<'a, S>: Send + Sync {
     /// Handle function for calling the handler logic on the actual implementation
     /// producing a future that lives as long as the state
     ///
     /// `state`  The state provided
     /// `packet` The packet to handle with the route
-    fn handle(&self, state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>>;
+    fn handle(
+        self: Box<Self>,
+        state: &'a mut S,
+        packet: Packet,
+    ) -> Result<PacketFuture<'a>, HandleError>;
+
+    fn boxed_clone(&self) -> Box<dyn Route<'a, S>>;
 }
 
 /// Structure wrapping a handler to allow the handler to implement Route
-pub struct HandlerRoute<'a, C, S, T> {
+struct HandlerRoute<H, Si, Req, Res> {
     /// The underlying handler
-    handler: C,
+    handler: H,
     /// Marker for storing related data
-    _marker: PhantomData<fn(&'a S) -> T>,
+    _marker: PhantomData<fn(Si, Req) -> Res>,
 }
 
 /// Route implementation for handlers wrapped by handler routes
-impl<'a, C, S, T> Route<'a, S> for HandlerRoute<'_, C, S, T>
+impl<'a, H, S, Si, Req, Res> Route<'a, S> for HandlerRoute<H, Si, Req, Res>
 where
-    for<'b> C: Handler<'b, S, T>,
-    S: State,
+    H: Handler<'a, S, Si, Req, Res>,
+    Req: FromRequestWrapper,
+    Res: IntoResponse,
+    Si: 'static,
+    S: Send + 'static,
 {
-    fn handle(&self, state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
-        let fut = self.handler.handle(state, packet)?;
-        Ok(fut)
+    fn handle(
+        self: Box<Self>,
+        state: &'a mut S,
+        packet: Packet,
+    ) -> Result<PacketFuture<'a>, HandleError> {
+        let req = match Req::from_request(&packet) {
+            Ok(value) => value,
+            Err(err) => return Err(HandleError::Decoding(err)),
+        };
+        let fut = self.handler.handle(state, req);
+        Ok(Box::pin(HandlerFuture { fut, packet }))
+    }
+
+    fn boxed_clone(&self) -> Box<dyn Route<'a, S>> {
+        Box::new(HandlerRoute {
+            handler: self.handler.clone(),
+            _marker: PhantomData,
+        })
     }
 }
 
 /// Route implementation for storing components mapped to route
 /// handlers
-pub struct Router<C: PacketComponents, S: State> {
+pub struct Router<C: PacketComponents, S> {
     /// The map of components to routes
     routes: HashMap<C, Box<dyn for<'a> Route<'a, S>>>,
 }
 
-impl<C: PacketComponents, S: State> Router<C, S> {
+impl<C, S> Router<C, S>
+where
+    C: PacketComponents,
+    S: State,
+{
     /// Creates a new router
     pub fn new() -> Self {
         Self {
@@ -183,9 +238,14 @@ impl<C: PacketComponents, S: State> Router<C, S> {
     ///
     /// `component` The component key for the route
     /// `route`     The actual route handler function
-    pub fn route<T>(&mut self, component: C, route: impl for<'a> Handler<'a, S, T>)
-    where
-        for<'a> T: 'a,
+    pub fn route<Si, Req, Res>(
+        &mut self,
+        component: C,
+        route: impl for<'a> Handler<'a, S, Si, Req, Res>,
+    ) where
+        Req: FromRequestWrapper,
+        Res: IntoResponse,
+        Si: 'static,
     {
         self.routes.insert(
             component,
@@ -202,13 +262,26 @@ impl<C: PacketComponents, S: State> Router<C, S> {
     ///
     /// `state`  The provided state
     /// `packet` The packet to handle
-    pub async fn handle<'a>(&self, state: &'a mut S, packet: Packet) -> DecodeResult<Packet> {
+    pub fn handle<'a>(
+        &self,
+        state: &'a mut S,
+        packet: Packet,
+    ) -> Result<PacketFuture<'a>, HandleError> {
         let component = C::from_header(&packet.header);
         let route = match self.routes.get(&component) {
-            Some(value) => value,
-            None => return Ok(packet.respond_empty()),
+            Some(value) => value.boxed_clone(),
+            None => return Err(HandleError::MissingHandler(packet)),
         };
-        let response = route.handle(state, packet)?.await;
-        Ok(response)
+        route.handle(state, packet)
     }
+}
+
+/// Error that can occur while handling a packet
+#[derive(Debug)]
+pub enum HandleError {
+    // There wasn't an available handler for the provided packet
+    MissingHandler(Packet),
+
+    // Decoding error while reading the packet
+    Decoding(DecodeError),
 }

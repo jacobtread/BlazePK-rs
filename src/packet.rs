@@ -596,7 +596,7 @@ impl<T: FromRequest> FromRequest for Request<T> {
 
 /// Trait implementing by structures which can be created from a request
 /// packet and is used for the arguments on routing functions
-pub trait FromRequest: Sized {
+pub trait FromRequest: Sized + Send + 'static {
     /// Takes the value from the request returning a decode result of
     /// whether the value could be created
     ///
@@ -606,24 +606,16 @@ pub trait FromRequest: Sized {
 
 impl<D> FromRequest for D
 where
-    D: Decodable,
+    D: Decodable + Send + 'static,
 {
     fn from_request(req: &Packet) -> DecodeResult<Self> {
         req.decode()
     }
 }
 
-/// From request implementation for unit types in order
-/// to simply ignore the request type
-impl FromRequest for () {
-    fn from_request(_: &Packet) -> DecodeResult<Self> {
-        Ok(())
-    }
-}
-
 /// Trait for a type that can be converted into a packet
 /// response using the header from the request packet
-pub trait IntoResponse {
+pub trait IntoResponse: 'static {
     /// Into packet conversion
     fn into_response(self, req: &Packet) -> Packet;
 }
@@ -640,7 +632,7 @@ impl IntoResponse for () {
 /// which just calls res.respond
 impl<E> IntoResponse for E
 where
-    E: Encodable,
+    E: Encodable + 'static,
 {
     fn into_response(self, req: &Packet) -> Packet {
         req.respond(self)
