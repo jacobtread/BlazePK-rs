@@ -13,7 +13,7 @@ pub struct Nil;
 /// Trait implemented by structures that can be provided
 /// as state to a router handle function and passed into
 /// the handlers
-pub trait State: Send + Sync + Sized + 'static {}
+pub trait State: Send + 'static {}
 
 /// Trait implemented by things that can be used to handler a packet from
 /// the router and return a future to a response packet.
@@ -47,7 +47,7 @@ where
     Fut: Future<Output = Res> + Send + 'a,
     Req: FromRequest + Send + 'a,
     Res: IntoResponse + 'a,
-    S: State + 'a,
+    S: State,
 {
     fn handle(&self, state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
         let req: Req = FromRequest::from_request(&packet)?;
@@ -72,7 +72,7 @@ where
     Fun: FnOnce(&'a mut S) -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
     Res: IntoResponse + 'a,
-    S: State + 'a,
+    S: State,
 {
     fn handle(&self, state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
         let inner = self.clone();
@@ -97,7 +97,7 @@ where
     Fut: Future<Output = Res> + Send + 'a,
     Req: FromRequest + Send + 'a,
     Res: IntoResponse + 'a,
-    S: State + 'a,
+    S: State,
 {
     fn handle(&self, _state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
         let req: Req = FromRequest::from_request(&packet)?;
@@ -121,7 +121,7 @@ where
     Fun: FnOnce() -> Fut + Clone + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
     Res: IntoResponse + 'a,
-    S: State + 'a,
+    S: State,
 {
     fn handle(&self, _state: &'a mut S, packet: Packet) -> DecodeResult<PacketFuture<'a>> {
         let inner = self.clone();
