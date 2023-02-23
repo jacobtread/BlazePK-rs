@@ -1,19 +1,32 @@
-[package]
-name = "blaze-pk"
-version = "0.9.0"
+[workspace]
+members = [".", "blaze-pk-derive"]
+
+[workspace.package]
 edition = "2021"
-description = "Rust library for Blaze packet system"
 license = "MIT"
 authors = ["Jacobtread <jacobtread@gmail.com>"]
 repository = "https://github.com/jacobtread/BlazePK-rs"
 readme = "README.md"
+
+[package]
+name = "blaze-pk"
+version = "0.9.0"
+description = "Rust library for Blaze packet system"
 keywords = ["EA", "serialization", "packet"]
 categories = ["network-programming", "parser-implementations"]
+
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme.workspace = true
+
 
 [dependencies]
 bytes = "1"
 serde = { version = "1.0", optional = true }
 tokio-util = { version = "0.7", features = ["codec"] }
+blaze-pk-derive = { version = "0.1", path = "./blaze-pk-derive" }
 
 [features]
 # Default features enables BlazeSSL and serde

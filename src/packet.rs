@@ -8,22 +8,7 @@ use std::{fmt::Debug, hash::Hash, sync::Arc};
 use std::{io, ops::Deref};
 use tokio_util::codec::{Decoder, Encoder};
 
-/// Trait for implementing packet target details
-pub trait PacketComponent: Debug {
-    // Converts the component command value into its u16 value
-    fn command(&self) -> u16;
-
-    /// Finds a component with the matching value based on whether
-    /// the packet is a notify packet or not
-    ///
-    /// `value`  The component value
-    /// `notify` Whether the packet was a notify packet
-    fn from_value(value: u16, notify: bool) -> Self;
-}
-
-/// Trait implemented by packet components for converting them into
-/// values and finding values from components
-pub trait PacketComponents: Debug + Eq + Sized + Hash {
+pub trait PacketComponents: Debug + Hash + Eq + Sized {
     /// Converts the packet component into the ID of the
     /// component, and command
     fn values(&self) -> (u16, u16);
@@ -34,19 +19,32 @@ pub trait PacketComponents: Debug + Eq + Sized + Hash {
     /// `component` The packet component
     /// `command`   The packet command
     /// `notify`    Whether the packet is a notify packet
-    fn from_values(component: u16, command: u16, notify: bool) -> Self;
+    fn from_values(component: u16, command: u16, notify: bool) -> Option<Self>;
 
     /// Decodes the packet component using the details stored in the provided
     /// packet header
     ///
     /// `header` The packet header to decode from
-    fn from_header(header: &PacketHeader) -> Self {
+    fn from_header(header: &PacketHeader) -> Option<Self> {
         Self::from_values(
             header.component,
             header.command,
             matches!(&header.ty, PacketType::Notify),
         )
     }
+}
+
+/// Trait for implementing packet target details
+pub trait PacketComponent: Debug + Hash + Eq + Sized {
+    // Converts the component command value into its u16 value
+    fn command(&self) -> u16;
+
+    /// Finds a component with the matching value based on whether
+    /// the packet is a notify packet or not
+    ///
+    /// `value`  The component value
+    /// `notify` Whether the packet was a notify packet
+    fn from_value(value: u16, notify: bool) -> Option<Self>;
 }
 
 /// The different types of packets
@@ -674,7 +672,7 @@ pub struct PacketDebug<'a, C> {
     /// Reference to the packet itself
     pub packet: &'a Packet,
     /// The component derived from the packet header
-    pub component: &'a C,
+    pub component: Option<&'a C>,
     /// Decide whether to display the contents of the packet
     pub minified: bool,
 }
@@ -686,7 +684,13 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Append basic header information
         let header = &self.packet.header;
-        writeln!(f, "Component: {:?}", self.component)?;
+        if let Some(component) = self.component {
+            writeln!(f, "Component: {:?}", component)?;
+        } else {
+            writeln!(f, "Component: {:?}", header.component)?;
+            writeln!(f, "Command: {:?}", header.command)?;
+        }
+
         writeln!(f, "Type: {:?}", header.ty)?;
 
         if !matches!(&header.ty, PacketType::Notify) {
