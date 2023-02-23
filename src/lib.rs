@@ -8,7 +8,9 @@ pub mod tag;
 pub mod types;
 pub mod writer;
 
+// Serde serialization
 #[cfg(feature = "serde")]
 pub mod serialize;
 
-pub use blaze_pk_derive::{Component, Components};
+/// Re-exports for derive macros
+pub use blaze_pk_derive::{PacketComponent, PacketComponents};
