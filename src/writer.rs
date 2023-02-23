@@ -95,7 +95,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The tag value boolean
-    #[inline]
     pub fn tag_bool(&mut self, tag: &[u8], value: bool) {
         self.tag(tag, TdfType::VarInt);
         self.write_bool(value);
@@ -106,7 +105,6 @@ impl TdfWriter {
     /// logic and directly write zero
     ///
     /// `tag` The tag to write
-    #[inline]
     pub fn tag_zero(&mut self, tag: &[u8]) {
         self.tag(tag, TdfType::VarInt);
         self.write_byte(0);
@@ -117,7 +115,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_u8(&mut self, tag: &[u8], value: u8) {
         self.tag(tag, TdfType::VarInt);
         self.write_u8(value);
@@ -128,7 +125,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_u16(&mut self, tag: &[u8], value: u16) {
         self.tag(tag, TdfType::VarInt);
         self.write_u16(value);
@@ -139,7 +135,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_u32(&mut self, tag: &[u8], value: u32) {
         self.tag(tag, TdfType::VarInt);
         self.write_u32(value);
@@ -150,7 +145,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_u64(&mut self, tag: &[u8], value: u64) {
         self.tag(tag, TdfType::VarInt);
         self.write_u64(value);
@@ -161,7 +155,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_usize(&mut self, tag: &[u8], value: usize) {
         self.tag(tag, TdfType::VarInt);
         self.write_usize(value);
@@ -170,7 +163,6 @@ impl TdfWriter {
     /// Writes a new tag where the value is an empty string
     ///
     /// `tag` The tag to write
-    #[inline]
     pub fn tag_str_empty(&mut self, tag: &[u8]) {
         self.tag(tag, TdfType::String);
         self.write_empty_str();
@@ -180,7 +172,6 @@ impl TdfWriter {
     /// Empty blobs are simply encoded with a zero length
     ///
     /// `tag` The tag to write
-    #[inline]
     pub fn tag_empty_blob(&mut self, tag: &[u8]) {
         self.tag(tag, TdfType::Blob);
         self.buffer.push(0);
@@ -190,7 +181,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_str(&mut self, tag: &[u8], value: &str) {
         self.tag(tag, TdfType::String);
         self.write_str(value)
@@ -199,13 +189,11 @@ impl TdfWriter {
     /// Writes a new tag indicating the start of a new group
     ///
     /// `tag` The tag to write
-    #[inline]
     pub fn tag_group(&mut self, tag: &[u8]) {
         self.tag(tag, TdfType::Group);
     }
 
     /// Writes the zero value that indicates the end of a group
-    #[inline]
     pub fn tag_group_end(&mut self) {
         self.buffer.push(0)
     }
@@ -227,7 +215,6 @@ impl TdfWriter {
     ///
     /// `tag` The tag to write
     /// `key` The key to write
-    #[inline]
     pub fn tag_union_start(&mut self, tag: &[u8], key: u8) {
         self.tag(tag, TdfType::Union);
         self.buffer.push(key);
@@ -254,7 +241,6 @@ impl TdfWriter {
     /// Writes a new tag indicating a union with no value
     ///
     /// `tag` The tag to write
-    #[inline]
     pub fn tag_union_unset(&mut self, tag: &[u8]) {
         self.tag_union_start(tag, UNION_UNSET);
     }
@@ -263,7 +249,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_value<C: Encodable + ValueType>(&mut self, tag: &[u8], value: &C) {
         self.tag(tag, C::value_type());
         value.encode(self);
@@ -273,7 +258,6 @@ impl TdfWriter {
     ///
     /// `tag` The tag to write
     /// `ty`  The type of the empty list
-    #[inline]
     pub fn tag_list_empty(&mut self, tag: &[u8], ty: TdfType) {
         self.tag(tag, TdfType::List);
         self.write_type(ty);
@@ -283,7 +267,6 @@ impl TdfWriter {
     /// Writes a tag for indiciating a var int list with no contents
     ///
     /// `tag` The tag to write
-    #[inline]
     pub fn tag_var_int_list_empty(&mut self, tag: &[u8]) {
         self.tag(tag, TdfType::VarIntList);
         self.buffer.push(0);
@@ -307,7 +290,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_pair<A, B>(&mut self, tag: &[u8], value: (A, B))
     where
         A: VarInt,
@@ -321,7 +303,6 @@ impl TdfWriter {
     ///
     /// `tag`   The tag to write
     /// `value` The value to write
-    #[inline]
     pub fn tag_triple<A, B, C>(&mut self, tag: &[u8], value: (A, B, C))
     where
         A: VarInt,
@@ -334,7 +315,6 @@ impl TdfWriter {
 
     /// Writes an empty string. This is simply two bytes a 1 and a 0 which
     /// indicate a string consisting of only a null terminator
-    #[inline]
     pub fn write_empty_str(&mut self) {
         self.buffer.extend_from_slice(&[1, 0])
     }

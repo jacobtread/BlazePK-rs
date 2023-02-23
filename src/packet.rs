@@ -126,7 +126,6 @@ impl PacketHeader {
 
     /// Creates a response to the provided packet header by
     /// changing the type of the header
-    #[inline]
     pub const fn response(&self) -> Self {
         self.with_type(PacketType::Response)
     }
@@ -276,7 +275,6 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
-    #[inline]
     pub fn respond<C: Encodable>(&self, contents: C) -> Self {
         Self::response(self, contents)
     }
@@ -309,7 +307,6 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `contents` The contents to encode for the packet
-    #[inline]
     pub const fn respond_empty(&self) -> Self {
         Self::response_empty(self)
     }
@@ -333,7 +330,6 @@ impl Packet {
     /// `packet`   The packet to respond to
     /// `error`    The response error value
     /// `contents` The response contents
-    #[inline]
     pub fn respond_error<C: Encodable>(&self, error: u16, contents: C) -> Self {
         Self::error(self, error, contents)
     }
@@ -356,7 +352,6 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `error`    The response error value
-    #[inline]
     pub const fn error_empty(packet: &Packet, error: u16) -> Packet {
         Self {
             header: packet.header.with_error(error),
@@ -369,7 +364,6 @@ impl Packet {
     ///
     /// `packet`   The packet to respond to
     /// `error`    The response error value
-    #[inline]
     pub const fn respond_error_empty(&self, error: u16) -> Packet {
         Self::error_empty(self, error)
     }
@@ -404,7 +398,6 @@ impl Packet {
     /// empty contents
     ///
     /// `component` The packet component
-    #[inline]
     pub fn notify_empty<T: PacketComponents>(component: T) -> Packet {
         let (component, command) = component.values();
         Self {

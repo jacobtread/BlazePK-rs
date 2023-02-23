@@ -269,7 +269,6 @@ where
 impl<K, V> TdfMap<K, V> {
     /// Constructor implemention just uses the underlying default
     /// implemenation
-    #[inline]
     pub fn new() -> Self {
         Self::default()
     }

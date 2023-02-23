@@ -257,7 +257,6 @@ where
     S: Send + 'static,
 {
     /// Creates a new router
-    #[inline]
     pub fn new() -> Self {
         Self::default()
     }
