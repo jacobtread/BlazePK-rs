@@ -187,11 +187,11 @@ trait Route<S>: Send + Sync {
     ///
     /// `state`  The state provided
     /// `packet` The packet to handle with the route
-    fn handle<'a>(
+    fn handle(
         self: Box<Self>,
-        state: &'a mut S,
+        state: &mut S,
         packet: Packet,
-    ) -> Result<PacketFuture<'a>, HandleError>;
+    ) -> Result<PacketFuture<'_>, HandleError>;
 
     /// Cloning implementation to clone self
     fn boxed_clone(&self) -> Box<dyn Route<S>>;
@@ -215,11 +215,11 @@ where
     Format: 'static,
     State: Send + 'static,
 {
-    fn handle<'a>(
+    fn handle(
         self: Box<Self>,
-        state: &'a mut State,
+        state: &mut State,
         packet: Packet,
-    ) -> Result<PacketFuture<'a>, HandleError> {
+    ) -> Result<PacketFuture<'_>, HandleError> {
         let req = match Req::from_request(&packet) {
             Ok(value) => value,
             Err(err) => return Err(HandleError::Decoding(err)),
