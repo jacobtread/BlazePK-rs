@@ -676,8 +676,8 @@ where
         if let Some(component) = self.component {
             writeln!(f, "Component: {:?}", component)?;
         } else {
-            writeln!(f, "Component: {:?}", header.component)?;
-            writeln!(f, "Command: {:?}", header.command)?;
+            writeln!(f, "Component: {:#06x}", header.component)?;
+            writeln!(f, "Command: {:#06x}", header.command)?;
         }
 
         writeln!(f, "Type: {:?}", header.ty)?;
@@ -687,7 +687,7 @@ where
         }
 
         if let PacketType::Error = &header.ty {
-            writeln!(f, "Error: {}", &header.error)?;
+            writeln!(f, "Error: {:#06x}", &header.error)?;
         }
 
         // Skip remaining if the message shouldn't contain its content
