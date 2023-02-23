@@ -58,8 +58,6 @@ pub enum PacketType {
     Notify,
     /// Error packets (0x30)
     Error,
-    /// Packet type that is unknown
-    Unknown(u8),
 }
 
 impl PacketType {
@@ -70,7 +68,6 @@ impl PacketType {
             PacketType::Response => 0x10,
             PacketType::Notify => 0x20,
             PacketType::Error => 0x30,
-            PacketType::Unknown(value) => *value,
         }
     }
 
@@ -83,7 +80,8 @@ impl PacketType {
             0x10 => PacketType::Response,
             0x20 => PacketType::Notify,
             0x30 => PacketType::Error,
-            value => PacketType::Unknown(value),
+            // Default type fallback to request
+            _ => PacketType::Request,
         }
     }
 }
