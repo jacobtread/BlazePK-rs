@@ -181,20 +181,20 @@ where
 /// Trait for erasing the inner types of the handler routes
 ///
 ///
-trait Route<'a, S>: Send + Sync {
+trait Route<S>: Send + Sync {
     /// Handle function for calling the handler logic on the actual implementation
     /// producing a future that lives as long as the state
     ///
     /// `state`  The state provided
     /// `packet` The packet to handle with the route
-    fn handle(
+    fn handle<'a>(
         self: Box<Self>,
         state: &'a mut S,
         packet: Packet,
     ) -> Result<PacketFuture<'a>, HandleError>;
 
     /// Cloning implementation to clone self
-    fn boxed_clone(&self) -> Box<dyn Route<'a, S>>;
+    fn boxed_clone(&self) -> Box<dyn Route<S>>;
 }
 
 /// Route wrapper over a handler for storing the phantom type data
@@ -207,15 +207,15 @@ struct HandlerRoute<H, Si, Req, Res> {
 }
 
 /// Route implementation for handlers wrapped by handler routes
-impl<'a, H, S, Si, Req, Res> Route<'a, S> for HandlerRoute<H, Si, Req, Res>
+impl<H, S, Si, Req, Res> Route<S> for HandlerRoute<H, Si, Req, Res>
 where
-    H: Handler<'a, S, Si, Req, Res>,
+    for<'a> H: Handler<'a, S, Si, Req, Res>,
     Req: FromRequestInternal,
     Res: IntoResponse,
     Si: 'static,
     S: Send + 'static,
 {
-    fn handle(
+    fn handle<'a>(
         self: Box<Self>,
         state: &'a mut S,
         packet: Packet,
@@ -228,7 +228,7 @@ where
         Ok(Box::pin(HandlerFuture { fut, packet }))
     }
 
-    fn boxed_clone(&self) -> Box<dyn Route<'a, S>> {
+    fn boxed_clone(&self) -> Box<dyn Route<S>> {
         Box::new(HandlerRoute {
             handler: self.handler.clone(),
             _marker: PhantomData,
@@ -240,7 +240,7 @@ where
 /// handlers
 pub struct Router<C, S> {
     /// The map of components to routes
-    routes: HashMap<C, Box<dyn for<'a> Route<'a, S>>>,
+    routes: HashMap<C, Box<dyn Route<S>>>,
 }
 
 impl<C, S> Default for Router<C, S> {
@@ -268,14 +268,14 @@ where
     ///
     /// `component` The component key for the route
     /// `route`     The actual route handler function
-    pub fn route<Si, Req, Res>(
+    pub fn route<Format, Req, Res>(
         &mut self,
         component: C,
-        route: impl for<'a> Handler<'a, S, Si, Req, Res>,
+        route: impl for<'a> Handler<'a, S, Format, Req, Res>,
     ) where
         Req: FromRequestInternal,
         Res: IntoResponse,
-        Si: 'static,
+        Format: 'static,
     {
         self.routes.insert(
             component,
