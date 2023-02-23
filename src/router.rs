@@ -199,25 +199,25 @@ trait Route<S>: Send + Sync {
 
 /// Route wrapper over a handler for storing the phantom type data
 /// and implementing Route
-struct HandlerRoute<H, Si, Req, Res> {
+struct HandlerRoute<H, Format, Req, Res> {
     /// The underlying handler
     handler: H,
     /// Marker for storing related data
-    _marker: PhantomData<fn(Si, Req) -> Res>,
+    _marker: PhantomData<fn(Format, Req) -> Res>,
 }
 
 /// Route implementation for handlers wrapped by handler routes
-impl<H, S, Si, Req, Res> Route<S> for HandlerRoute<H, Si, Req, Res>
+impl<H, State, Format, Req, Res> Route<State> for HandlerRoute<H, Format, Req, Res>
 where
-    for<'a> H: Handler<'a, S, Si, Req, Res>,
+    for<'a> H: Handler<'a, State, Format, Req, Res>,
     Req: FromRequestInternal,
     Res: IntoResponse,
-    Si: 'static,
-    S: Send + 'static,
+    Format: 'static,
+    State: Send + 'static,
 {
     fn handle<'a>(
         self: Box<Self>,
-        state: &'a mut S,
+        state: &'a mut State,
         packet: Packet,
     ) -> Result<PacketFuture<'a>, HandleError> {
         let req = match Req::from_request(&packet) {
@@ -228,7 +228,7 @@ where
         Ok(Box::pin(HandlerFuture { fut, packet }))
     }
 
-    fn boxed_clone(&self) -> Box<dyn Route<S>> {
+    fn boxed_clone(&self) -> Box<dyn Route<State>> {
         Box::new(HandlerRoute {
             handler: self.handler.clone(),
             _marker: PhantomData,
