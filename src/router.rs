@@ -243,16 +243,23 @@ pub struct Router<C, S> {
     routes: HashMap<C, Box<dyn for<'a> Route<'a, S>>>,
 }
 
+impl<C, S> Default for Router<C, S> {
+    fn default() -> Self {
+        Self {
+            routes: Default::default(),
+        }
+    }
+}
+
 impl<C, S> Router<C, S>
 where
     C: PacketComponents,
     S: Send + 'static,
 {
     /// Creates a new router
+    #[inline]
     pub fn new() -> Self {
-        Self {
-            routes: HashMap::new(),
-        }
+        Self::default()
     }
 
     /// Adds a new route to the router where the route is something that implements

@@ -587,7 +587,7 @@ impl IntoResponse for Response {
 impl<T: FromRequest> FromRequest for Request<T> {
     fn from_request(req: &Packet) -> DecodeResult<Self> {
         let inner = T::from_request(req)?;
-        let header = req.header.clone();
+        let header = req.header;
         Ok(Self { req: inner, header })
     }
 }
