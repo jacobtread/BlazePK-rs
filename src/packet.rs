@@ -52,13 +52,13 @@ pub trait PacketComponent: Debug + Hash + Eq + Sized {
 #[repr(u8)]
 pub enum PacketType {
     /// ID counted request packets (0x00)
-    Request = 0x0,
+    Request = 0x00,
     /// Packets responding to requests (0x10)
-    Response = 0x1,
+    Response = 0x10,
     /// Unique packets coming from the server (0x20)
-    Notify = 0x2,
+    Notify = 0x20,
     /// Error packets (0x30)
-    Error = 0x3,
+    Error = 0x30,
 }
 
 impl PacketType {
@@ -67,10 +67,10 @@ impl PacketType {
     /// `value` The value to get the type for
     pub fn from_value(value: u8) -> PacketType {
         match value {
-            0x0 => PacketType::Request,
-            0x1 => PacketType::Response,
-            0x2 => PacketType::Notify,
-            0x3 => PacketType::Error,
+            0x00 => PacketType::Request,
+            0x10 => PacketType::Response,
+            0x20 => PacketType::Notify,
+            0x30 => PacketType::Error,
             // Default type fallback to request
             _ => PacketType::Request,
         }
