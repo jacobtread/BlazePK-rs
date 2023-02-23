@@ -49,37 +49,28 @@ pub trait PacketComponent: Debug + Hash + Eq + Sized {
 
 /// The different types of packets
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
 pub enum PacketType {
     /// ID counted request packets (0x00)
-    Request,
+    Request = 0x0,
     /// Packets responding to requests (0x10)
-    Response,
+    Response = 0x1,
     /// Unique packets coming from the server (0x20)
-    Notify,
+    Notify = 0x2,
     /// Error packets (0x30)
-    Error,
+    Error = 0x3,
 }
 
 impl PacketType {
-    /// Returns the u16 representation of the packet type
-    pub fn value(&self) -> u8 {
-        match self {
-            PacketType::Request => 0x00,
-            PacketType::Response => 0x10,
-            PacketType::Notify => 0x20,
-            PacketType::Error => 0x30,
-        }
-    }
-
     /// Gets the packet type this value is represented by
     ///
     /// `value` The value to get the type for
     pub fn from_value(value: u8) -> PacketType {
         match value {
-            0x00 => PacketType::Request,
-            0x10 => PacketType::Response,
-            0x20 => PacketType::Notify,
-            0x30 => PacketType::Error,
+            0x0 => PacketType::Request,
+            0x1 => PacketType::Response,
+            0x2 => PacketType::Notify,
+            0x3 => PacketType::Error,
             // Default type fallback to request
             _ => PacketType::Request,
         }
@@ -183,7 +174,7 @@ impl PacketHeader {
         dst.put_u16(self.component);
         dst.put_u16(self.command);
         dst.put_u16(self.error);
-        dst.put_u8(self.ty.value());
+        dst.put_u8(self.ty as u8);
         dst.put_u8(if is_extended { 0x10 } else { 0x00 });
         dst.put_u16(self.id);
         if is_extended {
