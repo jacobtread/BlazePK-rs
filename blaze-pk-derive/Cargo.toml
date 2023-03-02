@@ -1,6 +1,8 @@
 [package]
 name = "blaze-pk-derive"
 version = "0.1.0"
+description = "Derive macros for working with blaze-pk"
+
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
