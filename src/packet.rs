@@ -190,6 +190,7 @@ impl PacketHeader {
         if src.len() < 12 {
             return None;
         }
+
         let mut length = src.get_u16() as usize;
         let component = src.get_u16();
         let command = src.get_u16();
@@ -460,9 +461,11 @@ impl Packet {
 
     pub fn read(src: &mut BytesMut) -> Option<Self> {
         let (header, length) = PacketHeader::read(src)?;
+
         if src.len() < length {
             return None;
         }
+
         let contents = src.split_to(length);
         Some(Self {
             header,
@@ -485,7 +488,14 @@ impl Decoder for PacketCodec {
     type Item = Packet;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        Ok(Packet::read(src))
+        let mut read_src = src.clone();
+        let result = Packet::read(&mut read_src);
+
+        if result.is_some() {
+            *src = read_src;
+        }
+
+        Ok(result)
     }
 }
 
