@@ -10,7 +10,7 @@ readme = "README.md"
 
 [package]
 name = "blaze-pk"
-version = "1.0.0"
+version = "1.0.1"
 description = "Rust library for Blaze packet system"
 keywords = ["EA", "serialization", "packet"]
 categories = ["network-programming", "parser-implementations"]
