@@ -57,7 +57,7 @@ impl TdfWriter {
     /// `ty` The type to write
     #[inline]
     pub fn write_type(&mut self, ty: TdfType) {
-        self.write_byte(ty.value());
+        self.write_byte(ty as u8);
     }
 
     /// Writes a tag vvalue to the underlying buffer
@@ -65,7 +65,7 @@ impl TdfWriter {
     /// `tag`        The tag bytes to write
     /// `value_type` The value type for the tag
     pub fn tag(&mut self, tag: &[u8], value_type: TdfType) {
-        let mut output: [u8; 4] = [0, 0, 0, value_type.value()];
+        let mut output: [u8; 4] = [0, 0, 0, value_type as u8];
         let length: usize = tag.len();
         if length > 0 {
             output[0] |= (tag[0] & 0x40) << 1;
@@ -468,7 +468,7 @@ mod test {
             );
             assert_eq!(
                 writer.buffer[3],
-                TdfType::VarInt.value(),
+                TdfType::VarInt as u8,
                 "Checking that tdf type matches VarInt"
             );
             writer.clear();
@@ -516,10 +516,9 @@ mod test {
         ];
         let mut writer = TdfWriter::default();
         for ty in TYPES {
-            let value = ty.value();
             writer.write_type(ty);
             assert_eq!(writer.buffer.len(), 1);
-            assert_eq!(writer.buffer[0], value);
+            assert_eq!(writer.buffer[0], ty as u8);
             writer.clear();
         }
     }
@@ -533,7 +532,7 @@ mod test {
         for (value, expected) in VALUES {
             writer.tag_bool(b"TEST", value);
             assert_eq!(writer.buffer.len(), 5);
-            assert_eq!(writer.buffer[3], TdfType::VarInt.value());
+            assert_eq!(writer.buffer[3], TdfType::VarInt as u8);
             assert_eq!(writer.buffer[4], expected);
             writer.clear();
         }
@@ -545,7 +544,7 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_zero(b"TEST");
         assert_eq!(writer.buffer.len(), 5);
-        assert_eq!(writer.buffer[3], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[3], TdfType::VarInt as u8);
         assert_eq!(writer.buffer[4], 0);
     }
 
@@ -632,7 +631,7 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_str_empty(b"TEST");
         assert_eq!(writer.buffer.len(), 6);
-        assert_eq!(writer.buffer[3], TdfType::String.value());
+        assert_eq!(writer.buffer[3], TdfType::String as u8);
         assert_eq!(&writer.buffer[4..6], &[1, 0]);
     }
 
@@ -642,7 +641,7 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_empty_blob(b"TEST");
         assert_eq!(writer.buffer.len(), 5);
-        assert_eq!(writer.buffer[3], TdfType::Blob.value());
+        assert_eq!(writer.buffer[3], TdfType::Blob as u8);
         assert_eq!(writer.buffer[4], 0);
     }
 
@@ -657,7 +656,7 @@ mod test {
 
         // 3) tag 1) type 1) length TEXT.len()) bytes 1) terminator
         assert_eq!(writer.buffer.len(), 5 + TEXT.len() + 1);
-        assert_eq!(writer.buffer[3], TdfType::String.value());
+        assert_eq!(writer.buffer[3], TdfType::String as u8);
 
         let length_bytes = (TEXT.len() + 1).encode_bytes();
 
@@ -678,7 +677,7 @@ mod test {
         writer.tag_group_end();
 
         assert_eq!(writer.buffer.len(), 5);
-        assert_eq!(writer.buffer[3], TdfType::Group.value());
+        assert_eq!(writer.buffer[3], TdfType::Group as u8);
         assert_eq!(writer.buffer[4], 0);
     }
 
@@ -688,21 +687,21 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_union_start(b"TEST", 15);
         assert_eq!(writer.buffer.len(), 5);
-        assert_eq!(writer.buffer[3], TdfType::Union.value());
+        assert_eq!(writer.buffer[3], TdfType::Union as u8);
         assert_eq!(writer.buffer[4], 15);
         writer.clear();
 
         writer.tag_union_unset(b"TEST");
         assert_eq!(writer.buffer.len(), 5);
-        assert_eq!(writer.buffer[3], TdfType::Union.value());
+        assert_eq!(writer.buffer[3], TdfType::Union as u8);
         assert_eq!(writer.buffer[4], UNION_UNSET);
         writer.clear();
 
         writer.tag_union_value(b"TEST", 5, b"TEST2", &15);
         assert_eq!(writer.buffer.len(), 10);
-        assert_eq!(writer.buffer[3], TdfType::Union.value());
+        assert_eq!(writer.buffer[3], TdfType::Union as u8);
         assert_eq!(writer.buffer[4], 5);
-        assert_eq!(writer.buffer[8], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[8], TdfType::VarInt as u8);
         assert_eq!(writer.buffer[9], 15);
     }
 
@@ -712,7 +711,7 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_value(b"TEST", &12u8);
         assert_eq!(writer.buffer.len(), 5);
-        assert_eq!(writer.buffer[3], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[3], TdfType::VarInt as u8);
         assert_eq!(writer.buffer[4], 12);
     }
 
@@ -722,8 +721,8 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_list_empty(b"TEST", TdfType::VarInt);
         assert_eq!(writer.buffer.len(), 6);
-        assert_eq!(writer.buffer[3], TdfType::List.value());
-        assert_eq!(writer.buffer[4], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[3], TdfType::List as u8);
+        assert_eq!(writer.buffer[4], TdfType::VarInt as u8);
         assert_eq!(writer.buffer[5], 0);
     }
 
@@ -733,7 +732,7 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_var_int_list_empty(b"TEST");
         assert_eq!(writer.buffer.len(), 5);
-        assert_eq!(writer.buffer[3], TdfType::VarIntList.value());
+        assert_eq!(writer.buffer[3], TdfType::VarIntList as u8);
         assert_eq!(writer.buffer[4], 0);
     }
 
@@ -743,9 +742,9 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_map_start(b"TEST", TdfType::String, TdfType::VarInt, 0);
         assert_eq!(writer.buffer.len(), 7);
-        assert_eq!(writer.buffer[3], TdfType::Map.value());
-        assert_eq!(writer.buffer[4], TdfType::String.value());
-        assert_eq!(writer.buffer[5], TdfType::VarInt.value());
+        assert_eq!(writer.buffer[3], TdfType::Map as u8);
+        assert_eq!(writer.buffer[4], TdfType::String as u8);
+        assert_eq!(writer.buffer[5], TdfType::VarInt as u8);
         assert_eq!(writer.buffer[6], 0);
     }
 
@@ -755,7 +754,7 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_pair(b"TEST", (5, 10));
         assert_eq!(writer.buffer.len(), 6);
-        assert_eq!(writer.buffer[3], TdfType::Pair.value());
+        assert_eq!(writer.buffer[3], TdfType::Pair as u8);
         assert_eq!(writer.buffer[4], 5);
         assert_eq!(writer.buffer[5], 10);
     }
@@ -766,7 +765,7 @@ mod test {
         let mut writer = TdfWriter::default();
         writer.tag_triple(b"TEST", (5, 10, 50));
         assert_eq!(writer.buffer.len(), 7);
-        assert_eq!(writer.buffer[3], TdfType::Triple.value());
+        assert_eq!(writer.buffer[3], TdfType::Triple as u8);
         assert_eq!(writer.buffer[4], 5);
         assert_eq!(writer.buffer[5], 10);
         assert_eq!(writer.buffer[6], 50);

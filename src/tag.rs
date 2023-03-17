@@ -8,50 +8,34 @@ pub struct Tag(pub String, pub TdfType);
 
 /// Types from the Blaze packet system which are used to describe
 /// what data needs to be decoded.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(u8)]
 pub enum TdfType {
     /// Variable length integer value
-    VarInt,
+    VarInt = 0x0,
     /// Strings
-    String,
+    String = 0x1,
     /// List of bytes
-    Blob,
+    Blob = 0x2,
     /// Group of tags
-    Group,
+    Group = 0x3,
     /// List of any of the previously mentioned
-    List,
+    List = 0x4,
     /// Map of TdfType to TdfType
-    Map,
+    Map = 0x5,
     /// Union of value where with unset type
-    Union,
+    Union = 0x6,
     /// List of variable length integers
-    VarIntList,
+    VarIntList = 0x7,
     /// Pair of two var int values
-    Pair,
+    Pair = 0x8,
     /// Three var int values
-    Triple,
+    Triple = 0x9,
     /// f32 value
-    Float,
+    Float = 0xA,
 }
 
 impl TdfType {
-    /// Returns the mapped byte value for the type
-    pub fn value(&self) -> u8 {
-        match self {
-            TdfType::VarInt => 0x0,
-            TdfType::String => 0x1,
-            TdfType::Blob => 0x2,
-            TdfType::Group => 0x3,
-            TdfType::List => 0x4,
-            TdfType::Map => 0x5,
-            TdfType::Union => 0x6,
-            TdfType::VarIntList => 0x7,
-            TdfType::Pair => 0x8,
-            TdfType::Triple => 0x9,
-            TdfType::Float => 0xA,
-        }
-    }
-
     /// Converts the byte value to its actual type returning
     /// an error if the type was unknown
     ///
