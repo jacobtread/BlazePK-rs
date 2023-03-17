@@ -71,8 +71,12 @@ type PacketFuture<'a> = BoxFuture<'a, Packet>;
 /// as a request type
 ///
 /// ```
-/// async fn test(state: &mut S, req: Req) -> Res {
+/// struct State;
+/// struct Req;
+/// struct Res;
 ///
+/// async fn test(state: &mut State, req: Req) -> Res {
+///     Res {}
 /// }
 /// ```
 impl<'a, State, Fn, Fut, Req, Res> Handler<'a, State, FormatA, Req, Res> for Fn
@@ -92,8 +96,11 @@ where
 /// without any state
 ///
 /// ```
-/// async fn test(req: Req) -> Res {
+/// struct Req;
+/// struct Res;
 ///
+/// async fn test(req: Req) -> Res {
+///     Res {}
 /// }
 /// ```
 impl<State, Fn, Fut, Req, Res> Handler<'_, State, FormatB, Req, Res> for Fn
@@ -113,8 +120,11 @@ where
 /// request type
 ///
 /// ```
-/// async fn test(state: &mut S) -> Res {
+/// struct State;
+/// struct Res;
 ///
+/// async fn test(state: &mut State) -> Res {
+///     Res {}
 /// }
 /// ```
 impl<'a, State, Fn, Fut, Res> Handler<'a, State, FormatA, (), Res> for Fn
@@ -132,8 +142,10 @@ where
 /// Handler implementation for async functions with no arguments
 ///
 /// ```
-/// async fn test() -> Res {
+/// struct Res;
 ///
+/// async fn test() -> Res {
+///     Res {}
 /// }
 /// ```
 impl<State, Fn, Fut, Res> Handler<'_, State, FormatB, (), Res> for Fn
