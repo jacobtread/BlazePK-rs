@@ -1,3 +1,5 @@
+use std::{error::Error, fmt::Display};
+
 use crate::tag::TdfType;
 
 /// Error type for errors that can occur while decoding a value
@@ -48,6 +50,53 @@ pub enum DecodeError {
 
     /// Other error type with custom message
     Other(&'static str),
+}
+
+// Error implementation
+impl Error for DecodeError {}
+
+// Display formatting implementation
+impl Display for DecodeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DecodeError::MissingTag { tag, ty } => {
+                write!(f, "Missing tag '{}' (type: {:?})", tag, ty)
+            }
+            DecodeError::InvalidTagType {
+                tag,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Invalid tag type for '{}' (expected: {:?}, got: {:?})",
+                    tag, expected, actual
+                )
+            }
+            DecodeError::InvalidType { expected, actual } => {
+                write!(
+                    f,
+                    "Unexpected tag type (expected: {:?}, got: {:?})",
+                    expected, actual
+                )
+            }
+            DecodeError::UnknownType { ty } => {
+                write!(f, "Unknown tag type: {}", ty)
+            }
+            DecodeError::UnexpectedEof {
+                cursor,
+                wanted,
+                remaining,
+            } => {
+                write!(
+                    f,
+                    "Unexpected end of file (cursor: {}, wanted: {}, remaining: {})",
+                    cursor, wanted, remaining
+                )
+            }
+            DecodeError::Other(err) => f.write_str(err),
+        }
+    }
 }
 
 /// Type alias for result which could result in a Decode Error
