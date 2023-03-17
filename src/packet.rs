@@ -61,11 +61,8 @@ pub enum PacketType {
     Error = 0x30,
 }
 
-impl PacketType {
-    /// Gets the packet type this value is represented by
-    ///
-    /// `value` The value to get the type for
-    pub fn from_value(value: u8) -> PacketType {
+impl From<u8> for PacketType {
+    fn from(value: u8) -> Self {
         match value {
             0x00 => PacketType::Request,
             0x10 => PacketType::Response,
@@ -209,7 +206,7 @@ impl PacketHeader {
             length += src.get_u16() as usize;
         }
 
-        let ty = PacketType::from_value(ty);
+        let ty = PacketType::from(ty);
         let header = PacketHeader {
             component,
             command,
