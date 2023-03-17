@@ -1,4 +1,4 @@
-use crate::error::{DecodeError, DecodeResult};
+use crate::error::DecodeError;
 use std::fmt::Debug;
 
 /// Tag for a Tdf value. This contains the String tag for naming
@@ -35,12 +35,10 @@ pub enum TdfType {
     Float = 0xA,
 }
 
-impl TdfType {
-    /// Converts the byte value to its actual type returning
-    /// an error if the type was unknown
-    ///
-    /// `value` The value to convert
-    pub fn from_value(value: u8) -> DecodeResult<TdfType> {
+impl TryFrom<u8> for TdfType {
+    type Error = DecodeError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         Ok(match value {
             0x0 => TdfType::VarInt,
             0x1 => TdfType::String,

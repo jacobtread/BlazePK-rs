@@ -341,13 +341,13 @@ impl<'a> TdfReader<'a> {
     /// Reads the next TdfType value after the cursor
     pub fn read_type(&mut self) -> DecodeResult<TdfType> {
         let value = self.read_byte()?;
-        TdfType::from_value(value)
+        TdfType::try_from(value)
     }
 
     /// Reads a tag from the underlying buffer
     pub fn read_tag(&mut self) -> DecodeResult<Tag> {
         let input: [u8; 4] = self.read_byte_4()?;
-        let value_type: TdfType = TdfType::from_value(input[3])?;
+        let value_type: TdfType = TdfType::try_from(input[3])?;
         let mut output: [u8; 4] = [0, 0, 0, 0];
 
         output[0] |= (input[0] & 0x80) >> 1;
