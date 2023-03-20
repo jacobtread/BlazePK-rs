@@ -562,6 +562,21 @@ impl<T: FromRequest> Request<T> {
     }
 }
 
+/// Wrapping structure for raw Bytes structures that can
+/// be used as packet response
+pub struct PacketBody(Bytes);
+
+impl<T> From<T> for PacketBody
+where
+    T: Encodable,
+{
+    fn from(value: T) -> Self {
+        let bytes = value.encode_bytes();
+        let bytes = Bytes::from(bytes);
+        PacketBody(bytes)
+    }
+}
+
 /// Type for route responses that have already been turned into
 /// packets usually for lifetime reasons
 pub struct Response(Packet);
@@ -570,6 +585,15 @@ impl IntoResponse for Response {
     /// Simply provide the already compute response
     fn into_response(self, _req: &Packet) -> Packet {
         self.0
+    }
+}
+
+impl IntoResponse for PacketBody {
+    fn into_response(self, req: &Packet) -> Packet {
+        Packet {
+            header: req.header.response(),
+            contents: self.0,
+        }
     }
 }
 
