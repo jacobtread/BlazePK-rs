@@ -1,3 +1,6 @@
+//! Writer buffer implementation for writing different kinds of tdf values
+//! to byte form without creating a new structure [`TdfWriter`]
+
 use crate::{
     codec::{Encodable, ValueType},
     tag::TdfType,
@@ -195,7 +198,22 @@ impl TdfWriter {
 
     /// Writes the zero value that indicates the end of a group
     pub fn tag_group_end(&mut self) {
-        self.buffer.push(0)
+        self.buffer.push(0);
+    }
+
+    /// Writes a group opening tag and then completes the group function
+    /// and closes the group tag
+    ///
+    /// `tag` The tag to write
+    /// `gr`  The group closure
+    #[inline]
+    pub fn group<F>(&mut self, tag: &[u8], gr: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        self.tag_group(tag);
+        gr(self);
+        self.tag_group_end();
     }
 
     /// Writes a new tag indicating that a list is begining and writes the list

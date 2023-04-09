@@ -1,3 +1,6 @@
+//! Router implementation for routing packet components to different functions
+//! and automatically decoding the packet contents to the function type
+
 use crate::{
     error::{DecodeError, DecodeResult},
     packet::{FromRequest, IntoResponse, Packet, PacketComponents},
@@ -191,8 +194,6 @@ where
 }
 
 /// Trait for erasing the inner types of the handler routes
-///
-///
 trait Route<S>: Send + Sync {
     /// Handle function for calling the handler logic on the actual implementation
     /// producing a future that lives as long as the state
@@ -323,9 +324,8 @@ where
 /// Error that can occur while handling a packet
 #[derive(Debug)]
 pub enum HandleError {
-    // There wasn't an available handler for the provided packet
+    /// There wasn't an available handler for the provided packet
     MissingHandler(Packet),
-
-    // Decoding error while reading the packet
+    /// Decoding error while reading the packet
     Decoding(DecodeError),
 }

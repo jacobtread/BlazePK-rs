@@ -1,3 +1,5 @@
+//! Implementation for [`Tag`]s and [`TdfType`]s
+
 use crate::error::DecodeError;
 use std::fmt::Debug;
 
@@ -35,6 +37,7 @@ pub enum TdfType {
     Float = 0xA,
 }
 
+/// Convert bytes back to tdf types
 impl TryFrom<u8> for TdfType {
     type Error = DecodeError;
 

@@ -1,6 +1,8 @@
-use std::{error::Error, fmt::Display};
+//! Error type used when decoding packets [`DecodeError`] and result
+//! type alias [`DecodeResult`]
 
 use crate::tag::TdfType;
+use std::{error::Error, fmt::Display};
 
 /// Error type for errors that can occur while decoding a value
 /// using the tdf decode
@@ -52,10 +54,13 @@ pub enum DecodeError {
     Other(&'static str),
 }
 
-// Error implementation
+/// Type alias for result which could result in a Decode Error
+pub type DecodeResult<T> = Result<T, DecodeError>;
+
+/// Error implementation
 impl Error for DecodeError {}
 
-// Display formatting implementation
+/// Display formatting implementation
 impl Display for DecodeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -98,6 +103,3 @@ impl Display for DecodeError {
         }
     }
 }
-
-/// Type alias for result which could result in a Decode Error
-pub type DecodeResult<T> = Result<T, DecodeError>;

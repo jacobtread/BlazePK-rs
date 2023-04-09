@@ -1,3 +1,6 @@
+//! Traits for implementing encoding ([`Encodable`]) and decoding ([`Decodable`])
+//! for different types and [`ValueType`] trait for specifying the Tdf type of a type
+
 use crate::{error::DecodeResult, reader::TdfReader, tag::TdfType, writer::TdfWriter};
 
 /// Trait for something that can be decoded from a TdfReader

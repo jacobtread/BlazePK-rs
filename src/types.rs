@@ -1,3 +1,6 @@
+//! Types implementation for custom types used while encoding values
+//! with Blaze packets
+
 use crate::codec::{Decodable, Encodable, ValueType};
 use crate::error::{DecodeError, DecodeResult};
 use crate::reader::TdfReader;
@@ -102,7 +105,9 @@ impl<C> ValueType for VarIntList<C> {
 /// values
 #[derive(Debug, PartialEq, Eq)]
 pub enum Union<C> {
+    /// Set variant of a union value
     Set { key: u8, tag: String, value: C },
+    /// Unset variant of a union value
     Unset,
 }
 
@@ -132,6 +137,8 @@ impl<C> Union<C> {
         matches!(self, Self::Unset)
     }
 
+    /// Unwraps the underlying value stored in this union panicing if the
+    /// value is unset
     pub fn unwrap(self) -> C {
         match self {
             Self::Unset => panic!("Attempted to unwrap union with no value"),
@@ -436,6 +443,7 @@ where
 pub struct TdfMapIter<'a, K, V> {
     /// The map iterate over
     map: &'a TdfMap<K, V>,
+    /// The current position on the underlying map
     index: usize,
 }
 
@@ -449,8 +457,12 @@ impl<'a, K, V> Iterator for TdfMapIter<'a, K, V> {
     }
 }
 
+/// Iterator for TdfMaps that owns the underlying contents
+/// of the map
 pub struct OwnedTdfMapIter<K, V> {
+    /// The map keys
     keys: Vec<K>,
+    /// The map values
     values: Vec<V>,
 }
 

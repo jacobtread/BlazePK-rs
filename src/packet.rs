@@ -1,3 +1,9 @@
+//! Packet implementation for creating [`Packet`]s along with types
+//! used by the router for creating and decoding contents / responses
+//!
+//! Also contains the decoding and encoding logic for tokio codec
+//! [`PacketCodec`]
+
 use crate::{
     codec::{Decodable, Encodable},
     error::DecodeResult,
@@ -8,6 +14,7 @@ use std::{fmt::Debug, hash::Hash, sync::Arc};
 use std::{io, ops::Deref};
 use tokio_util::codec::{Decoder, Encoder};
 
+/// Trait implemented by structures that can be used as packet components
 pub trait PacketComponents: Debug + Hash + Eq + Sized {
     /// Converts the packet component into the ID of the
     /// component, and command
@@ -61,6 +68,8 @@ pub enum PacketType {
     Error = 0x30,
 }
 
+/// From u8 implementation to convert bytes back into
+/// PacketTypes
 impl From<u8> for PacketType {
     fn from(value: u8) -> Self {
         match value {
@@ -456,6 +465,10 @@ impl Packet {
         C::decode(&mut reader)
     }
 
+    /// Attempts to read a packet from the provided
+    /// bytes source
+    ///
+    /// `src` The bytes to read from
     pub fn read(src: &mut BytesMut) -> Option<Self> {
         let (header, length) = PacketHeader::read(src)?;
 
@@ -470,6 +483,10 @@ impl Packet {
         })
     }
 
+    /// Writes the contents and header of the packet
+    /// onto the dst source of bytes
+    ///
+    /// `dst` The destination buffer
     pub fn write(&self, dst: &mut BytesMut) {
         let contents = &self.contents;
         self.header.write(dst, contents.len());
@@ -477,6 +494,7 @@ impl Packet {
     }
 }
 
+/// Tokio codec for encoding and decoding packets
 pub struct PacketCodec;
 
 /// Decoder implementation
@@ -529,9 +547,9 @@ impl Encoder<Arc<Packet>> for PacketCodec {
 /// Structure wrapping a from request type to include a packet
 /// header to allow the response type to be created
 pub struct Request<T: FromRequest> {
-    // The decoded request type
+    /// The decoded request type
     pub req: T,
-    // The packet header from the request
+    /// The packet header from the request
     pub header: PacketHeader,
 }
 

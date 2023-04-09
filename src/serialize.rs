@@ -1,10 +1,9 @@
 //! This module contains the serde Serialize implementations for the
 //! structures created by Pocket Relay
 
+use crate::types::{Blob, TdfMap, VarIntList};
 use serde::ser::SerializeMap;
 use serde::Serialize;
-
-use crate::types::{Blob, TdfMap, VarIntList};
 
 impl<K, V> Serialize for TdfMap<K, V>
 where
