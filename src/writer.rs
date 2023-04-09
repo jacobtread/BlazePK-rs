@@ -699,6 +699,18 @@ mod test {
         assert_eq!(writer.buffer[4], 0);
     }
 
+    /// Tests tagging a group with the closure way
+    #[test]
+    fn test_tag_group_alt() {
+        let mut writer = TdfWriter::default();
+
+        writer.group(b"TEST", |_| {});
+
+        assert_eq!(writer.buffer.len(), 5);
+        assert_eq!(writer.buffer[3], TdfType::Group as u8);
+        assert_eq!(writer.buffer[4], 0);
+    }
+
     /// Tests tagging a union
     #[test]
     fn test_tag_union() {
