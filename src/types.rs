@@ -363,32 +363,6 @@ impl<K, V> TdfMap<K, V>
 where
     K: PartialOrd + Ord,
 {
-    /// Inserts a new key value pair into the underlying structure
-    ///
-    /// `key`   The entry key
-    /// `value` The entry value
-    pub fn insert_ordered<A: Into<K>, B: Into<V>>(&mut self, key: A, value: B) {
-        let entry: MapEntry<K, V> = MapEntry {
-            key: key.into(),
-            value: value.into(),
-        };
-
-        let entries = &mut self.entries;
-        if !entries.is_empty() {
-            for i in 0..entries.len() {
-                let at = &entries[i];
-                if entry.key.gt(&at.key) {
-                    continue;
-                }
-                // Move entry over to fit
-                entries.insert(i, entry);
-                return;
-            }
-        }
-        // Place entry at end
-        entries.push(entry);
-    }
-
     /// Orders this map based on its keys by ordering keys that
     /// are greater further up in the map
     ///
@@ -402,16 +376,8 @@ where
         if length <= 1 {
             return;
         }
-        let mut did_run = true;
-        while did_run {
-            did_run = false;
-            for i in 0..(length - 1) {
-                if entries[i].key > entries[i + 1].key {
-                    entries.swap(i, i + 1);
-                    did_run = true
-                }
-            }
-        }
+
+        entries.sort_by(|a, b| a.key.cmp(&b.key));
     }
 }
 
@@ -950,26 +916,6 @@ mod test {
         map.order();
         let el = i.elapsed();
         println!("Full order time: {:?}", el);
-
-        assert_eq!(map.entries[0].key, "key1");
-        assert_eq!(map.entries[1].key, "key11");
-        assert_eq!(map.entries[2].key, "key17");
-        assert_eq!(map.entries[3].key, "key2");
-        assert_eq!(map.entries[4].key, "key24");
-        assert_eq!(map.entries[5].key, "key4");
-
-        map.clear();
-
-        let i = Instant::now();
-        // Input order
-        map.insert_ordered("key1", "ABC");
-        map.insert_ordered("key2", "ABC");
-        map.insert_ordered("key4", "ABC");
-        map.insert_ordered("key24", "ABC");
-        map.insert_ordered("key11", "ABC");
-        map.insert_ordered("key17", "ABC");
-        let el = i.elapsed();
-        println!("Insert order time: {:?}", el);
 
         assert_eq!(map.entries[0].key, "key1");
         assert_eq!(map.entries[1].key, "key11");
