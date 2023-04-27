@@ -10,7 +10,7 @@ use crate::writer::TdfWriter;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::slice::Iter;
+use std::{slice, vec};
 
 /// List of Var ints
 #[derive(Debug, PartialEq, Eq)]
@@ -231,17 +231,35 @@ impl_var_int!(u8, i8, u16, i16, u32, i32, u64, i64, usize, isize);
 /// order that is usually required and they retain the order of insertion
 /// because it uses two vecs as the underlying structure
 pub struct TdfMap<K, V> {
-    /// The keys stored in this map
-    keys: Vec<K>,
-    /// The values stored in this map
-    values: Vec<V>,
+    /// The entries stored in this map
+    entries: Vec<MapEntry<K, V>>,
+}
+
+/// Entry within a TdfMap storing a key value pair
+struct MapEntry<K, V> {
+    /// Entry key
+    key: K,
+    /// Entry value
+    value: V,
+}
+
+impl<K, V> Clone for MapEntry<K, V>
+where
+    K: Clone,
+    V: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            value: self.value.clone(),
+        }
+    }
 }
 
 impl<K, V> Default for TdfMap<K, V> {
     fn default() -> Self {
         Self {
-            keys: Vec::new(),
-            values: Vec::new(),
+            entries: Vec::new(),
         }
     }
 }
@@ -253,8 +271,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            keys: self.keys.clone(),
-            values: self.values.clone(),
+            entries: self.entries.clone(),
         }
     }
 }
@@ -267,7 +284,7 @@ where
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("TdfMap {")?;
         for (key, value) in self.iter() {
-            writeln!(f, "  \"{key:?}\": \"{value:?}\"")?;
+            writeln!(f, "  {key:?}: {value:?}")?;
         }
         f.write_str("}")
     }
@@ -286,63 +303,115 @@ impl<K, V> TdfMap<K, V> {
     /// `capacity` The capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            keys: Vec::with_capacity(capacity),
-            values: Vec::with_capacity(capacity),
+            entries: Vec::with_capacity(capacity),
         }
     }
 
     /// Returns the length of the underlying lists
     pub fn len(&self) -> usize {
-        self.keys.len()
+        self.entries.len()
     }
 
     /// Returns if the underlying lists are empty
     pub fn is_empty(&self) -> bool {
-        self.keys.is_empty()
+        self.entries.is_empty()
     }
 
     /// Creates a new iterator over the underlying items
     /// in the map
-    pub fn iter(&self) -> TdfMapIter<'_, K, V> {
-        TdfMapIter {
-            map: self,
-            index: 0,
+    pub fn iter(&self) -> MapEntryIter<'_, K, V> {
+        MapEntryIter {
+            inner: self.entries.iter(),
         }
     }
 
     /// Returns the key and value stored at the provided index
     /// will return None if there is nothing at the provided index
     pub fn index(&self, index: usize) -> Option<(&'_ K, &'_ V)> {
-        let key = self.keys.get(index)?;
-        let value = self.values.get(index)?;
-        Some((key, value))
+        let entry = self.entries.get(index)?;
+        Some((&entry.key, &entry.value))
     }
 
-    /// Inserts a new key value pair into the underlying structure
+    /// Inserts a new key value pair into the underlying structure.
+    ///
+    /// This function does NOT maintain order of the entires, use
+    /// `insert_ordered` instead for maintaining the order
     ///
     /// `key`   The entry key
     /// `value` The entry value
     pub fn insert<A: Into<K>, B: Into<V>>(&mut self, key: A, value: B) {
-        self.keys.push(key.into());
-        self.values.push(value.into())
+        self.entries.push(MapEntry {
+            key: key.into(),
+            value: value.into(),
+        });
     }
 
     /// Removes the last key and value returning them or None
     /// if there are no entries
     pub fn pop(&mut self) -> Option<(K, V)> {
-        let key = self.keys.pop()?;
-        let value = self.values.pop()?;
-        Some((key, value))
+        let entry = self.entries.pop()?;
+        Some((entry.key, entry.value))
     }
 
-    /// Iterator access for the map keys
-    pub fn keys(&self) -> Iter<'_, K> {
-        self.keys.iter()
+    /// Removes all entries from the underlying list
+    pub fn clear(&mut self) {
+        self.entries.clear();
+    }
+}
+
+impl<K, V> TdfMap<K, V>
+where
+    K: PartialOrd + Ord,
+{
+    /// Inserts a new key value pair into the underlying structure
+    ///
+    /// `key`   The entry key
+    /// `value` The entry value
+    pub fn insert_ordered<A: Into<K>, B: Into<V>>(&mut self, key: A, value: B) {
+        let entry: MapEntry<K, V> = MapEntry {
+            key: key.into(),
+            value: value.into(),
+        };
+
+        let entries = &mut self.entries;
+        if !entries.is_empty() {
+            for i in 0..entries.len() {
+                let at = &entries[i];
+                if entry.key.gt(&at.key) {
+                    continue;
+                }
+                // Move entry over to fit
+                entries.insert(i, entry);
+                return;
+            }
+        }
+        // Place entry at end
+        entries.push(entry);
     }
 
-    /// Iterator access for the map values
-    pub fn values(&self) -> Iter<'_, V> {
-        self.values.iter()
+    /// Orders this map based on its keys by ordering keys that
+    /// are greater further up in the map
+    ///
+    /// This function is quite slow compared to using `insert_ordered`
+    /// for all the inserted entries. This is only for if you inserted
+    /// with `insert` instead
+    pub fn order(&mut self) {
+        let entries = &mut self.entries;
+        let length = entries.len();
+        // If empty or 1 item no need to order
+        if length <= 1 {
+            return;
+        }
+        let mut did_run = true;
+        while did_run {
+            did_run = false;
+            for i in 0..(length - 1) {
+                if entries[i].key > entries[i + 1].key {
+                    entries.swap(i, i + 1);
+                    did_run = true
+                }
+            }
+        }
     }
 }
 
@@ -356,10 +425,10 @@ where
     ///
     /// `other` The map to extend with
     pub fn extend(&mut self, other: TdfMap<K, V>) {
-        for (key, value) in other.into_iter() {
-            let key_index: Option<usize> = self.keys.iter().position(|value| key.eq(value));
+        for MapEntry { key, value } in other.entries {
+            let key_index: Option<usize> = self.entries.iter().position(|value| key.eq(&value.key));
             if let Some(index) = key_index {
-                self.values[index] = value;
+                self.entries[index].value = value;
             } else {
                 self.insert(key, value);
             }
@@ -375,8 +444,9 @@ where
         K: Borrow<Q>,
         Q: Eq,
     {
-        for index in 0..self.keys.len() {
-            let key_at = self.keys[index].borrow();
+        for index in 0..self.entries.len() {
+            let entry_at = &self.entries[index];
+            let key_at = entry_at.key.borrow();
             if key_at.eq(key) {
                 return Some(index);
             }
@@ -390,9 +460,8 @@ where
     /// `key` The key to remove
     pub fn remove(&mut self, key: &K) -> Option<(K, V)> {
         let index = self.index_of_key(key)?;
-        let key = self.keys.remove(index);
-        let value = self.values.remove(index);
-        Some((key, value))
+        let entry = self.entries.remove(index);
+        Some((entry.key, entry.value))
     }
 
     /// Returns the value stored at the provided key if
@@ -406,8 +475,8 @@ where
         Q: Eq,
     {
         let index = self.index_of_key(key)?;
-        let value = self.values.get(index)?;
-        Some(value)
+        let entry = self.entries.get(index)?;
+        Some(&entry.value)
     }
 
     /// Returns a mutable borrow to the value stored at the
@@ -421,8 +490,9 @@ where
         Q: Eq,
     {
         let index = self.index_of_key(key)?;
-        let value = self.values.get_mut(index)?;
-        Some(value)
+        let entry = self.entries.get_mut(index)?;
+
+        Some(&mut entry.value)
     }
 
     /// Takes the value stored at the provided key out of
@@ -433,46 +503,65 @@ where
         Q: Eq,
     {
         let index = self.index_of_key(key)?;
-        let value = self.values.remove(index);
-        self.keys.remove(index);
-        Some(value)
+        let entry = self.entries.remove(index);
+        Some(entry.value)
     }
 }
 
 /// Iterator implementation for iterating over TdfMap
-pub struct TdfMapIter<'a, K, V> {
-    /// The map iterate over
-    map: &'a TdfMap<K, V>,
-    /// The current position on the underlying map
-    index: usize,
+pub struct MapEntryIter<'a, K, V> {
+    /// The underlying map entry iterator
+    inner: slice::Iter<'a, MapEntry<K, V>>,
 }
 
-impl<'a, K, V> Iterator for TdfMapIter<'a, K, V> {
+impl<'a, K, V> Iterator for MapEntryIter<'a, K, V> {
     type Item = (&'a K, &'a V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let entry = self.map.index(self.index);
-        self.index += 1;
-        entry
+        let next = self.inner.next()?;
+
+        Some((&next.key, &next.value))
     }
 }
 
-/// Iterator for TdfMaps that owns the underlying contents
-/// of the map
-pub struct OwnedTdfMapIter<K, V> {
-    /// The map keys
-    keys: Vec<K>,
-    /// The map values
-    values: Vec<V>,
+/// Iterator type sitting ontop of the map entries to
+/// produce unions of the key values from the vec of
+/// map entries
+pub struct OwnedMapEntryIter<K, V> {
+    /// The underlying entry iterator
+    inner: vec::IntoIter<MapEntry<K, V>>,
 }
 
-impl<K, V> Iterator for OwnedTdfMapIter<K, V> {
+impl<K, V> Iterator for OwnedMapEntryIter<K, V> {
     type Item = (K, V);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let key = self.keys.pop()?;
-        let value = self.values.pop()?;
+        let MapEntry { key, value } = self.inner.next()?;
         Some((key, value))
+    }
+}
+
+/// Into iterator implementation for owned map
+impl<K, V> IntoIterator for TdfMap<K, V> {
+    type Item = (K, V);
+    type IntoIter = OwnedMapEntryIter<K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        OwnedMapEntryIter {
+            inner: self.entries.into_iter(),
+        }
+    }
+}
+
+/// Into iterator implementation for borrowed map
+impl<'a, K, V> IntoIterator for &'a TdfMap<K, V> {
+    type Item = (&'a K, &'a V);
+    type IntoIter = MapEntryIter<'a, K, V>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        MapEntryIter {
+            inner: self.entries.iter(),
+        }
     }
 }
 
@@ -484,7 +573,7 @@ where
     fn encode(&self, output: &mut TdfWriter) {
         output.write_map_header(K::value_type(), V::value_type(), self.len());
 
-        for (key, value) in self.iter() {
+        for MapEntry { key, value } in &self.entries {
             key.encode(output);
             value.encode(output);
         }
@@ -508,61 +597,17 @@ impl<K, V> ValueType for TdfMap<K, V> {
     }
 }
 
-impl<K, V> TdfMap<K, V>
-where
-    K: PartialOrd,
-{
-    /// Orders this map based on its keys by ordering keys that
-    /// are greater further up in the map
-    pub fn order(&mut self) {
-        let keys = &mut self.keys;
-        let values = &mut self.values;
-        let length = keys.len();
-        // If empty or 1 item no need to order
-        if length <= 1 {
-            return;
-        }
-        let mut did_run = true;
-        while did_run {
-            did_run = false;
-            for i in 0..(length - 1) {
-                if keys[i] > keys[i + 1] {
-                    keys.swap(i, i + 1);
-                    values.swap(i, i + 1);
-                    did_run = true
-                }
-            }
-        }
-    }
-}
-
 /// Implementation for converting a HashMap to a TdfMap by taking
 /// all its keys and values and building lists for the TdfMap
 impl<K, V> From<HashMap<K, V>> for TdfMap<K, V> {
     fn from(map: HashMap<K, V>) -> Self {
-        let mut keys: Vec<K> = Vec::with_capacity(map.len());
-        let mut values: Vec<V> = Vec::with_capacity(map.len());
+        let mut entries: Vec<MapEntry<K, V>> = Vec::with_capacity(map.len());
 
         for (key, value) in map.into_iter() {
-            keys.push(key);
-            values.push(value)
+            entries.push(MapEntry { key, value });
         }
 
-        Self { keys, values }
-    }
-}
-
-impl<K, V> IntoIterator for TdfMap<K, V> {
-    type Item = (K, V);
-    type IntoIter = OwnedTdfMapIter<K, V>;
-
-    fn into_iter(mut self) -> Self::IntoIter {
-        self.keys.reverse();
-        self.values.reverse();
-        OwnedTdfMapIter {
-            keys: self.keys,
-            values: self.values,
-        }
+        Self { entries }
     }
 }
 
@@ -874,6 +919,8 @@ impl<A, B, C> ValueType for Triple<A, B, C> {
 #[cfg(test)]
 mod test {
 
+    use std::time::Instant;
+
     use crate::types::TdfMap;
 
     /// Tests ordering a map
@@ -881,6 +928,18 @@ mod test {
     fn test_map_ord() {
         let mut map = TdfMap::<String, String>::new();
 
+        // Expected order:
+        // TdfMap {
+        //   "key1": "ABC"
+        //   "key11": "ABC"
+        //   "key17": "ABC"
+        //   "key2": "ABC"
+        //   "key24": "ABC"
+        //   "key4": "ABC"
+        // }
+
+        let i = Instant::now();
+        // Input order
         map.insert("key1", "ABC");
         map.insert("key2", "ABC");
         map.insert("key4", "ABC");
@@ -889,8 +948,35 @@ mod test {
         map.insert("key17", "ABC");
 
         map.order();
+        let el = i.elapsed();
+        println!("Full order time: {:?}", el);
 
-        println!("{map:?}")
+        assert_eq!(map.entries[0].key, "key1");
+        assert_eq!(map.entries[1].key, "key11");
+        assert_eq!(map.entries[2].key, "key17");
+        assert_eq!(map.entries[3].key, "key2");
+        assert_eq!(map.entries[4].key, "key24");
+        assert_eq!(map.entries[5].key, "key4");
+
+        map.clear();
+
+        let i = Instant::now();
+        // Input order
+        map.insert_ordered("key1", "ABC");
+        map.insert_ordered("key2", "ABC");
+        map.insert_ordered("key4", "ABC");
+        map.insert_ordered("key24", "ABC");
+        map.insert_ordered("key11", "ABC");
+        map.insert_ordered("key17", "ABC");
+        let el = i.elapsed();
+        println!("Insert order time: {:?}", el);
+
+        assert_eq!(map.entries[0].key, "key1");
+        assert_eq!(map.entries[1].key, "key11");
+        assert_eq!(map.entries[2].key, "key17");
+        assert_eq!(map.entries[3].key, "key2");
+        assert_eq!(map.entries[4].key, "key24");
+        assert_eq!(map.entries[5].key, "key4");
     }
 
     /// Tests extending an existing map
