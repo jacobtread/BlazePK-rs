@@ -10,9 +10,9 @@ repository.workspace = true
 readme.workspace = true
 
 [dependencies]
-darling = "0.14"
+darling = "0.20"
 quote = "1"
-syn = { version = "1", features = ["full"] }
+syn = { version = "2", features = ["full"] }
 
 [lib]
 proc-macro = true
