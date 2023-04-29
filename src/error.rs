@@ -1,7 +1,7 @@
 //! Error type used when decoding packets [`DecodeError`] and result
 //! type alias [`DecodeResult`]
 
-use crate::tag::TdfType;
+use crate::tag::{Tag, TdfType};
 use std::{error::Error, fmt::Display};
 
 /// Error type for errors that can occur while decoding a value
@@ -11,14 +11,14 @@ pub enum DecodeError {
     /// The tag that was expected could not be found
     MissingTag {
         /// The tag that was being searched for
-        tag: String,
+        tag: Tag,
         /// The type of the tag being searched for
         ty: TdfType,
     },
     /// The found tag was not of the correct type
     InvalidTagType {
         /// The tag which the type was invalid for
-        tag: String,
+        tag: Tag,
         /// The expected tdf type
         expected: TdfType,
         /// The actual tdf type

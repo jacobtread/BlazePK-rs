@@ -4,7 +4,7 @@
 use crate::codec::{Decodable, Encodable, ValueType};
 use crate::error::{DecodeError, DecodeResult};
 use crate::reader::TdfReader;
-use crate::tag::TdfType;
+use crate::tag::{Tag, TdfType};
 use crate::value_type;
 use crate::writer::TdfWriter;
 use std::borrow::Borrow;
@@ -106,7 +106,7 @@ impl<C> ValueType for VarIntList<C> {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Union<C> {
     /// Set variant of a union value
-    Set { key: u8, tag: String, value: C },
+    Set { key: u8, tag: Tag, value: C },
     /// Unset variant of a union value
     Unset,
 }
@@ -119,10 +119,10 @@ impl<C> Union<C> {
 
     /// Creates a new set union value with the provided
     /// key tag and value
-    pub fn set(key: u8, tag: &str, value: C) -> Self {
+    pub fn set(key: u8, tag: &[u8], value: C) -> Self {
         Self::Set {
             key,
-            tag: tag.to_owned(),
+            tag: tag.into(),
             value,
         }
     }
@@ -170,7 +170,7 @@ where
         match self {
             Union::Set { key, tag, value } => {
                 output.write_byte(*key);
-                output.tag(tag.as_bytes(), C::value_type());
+                output.tag(&tag.0, C::value_type());
                 value.encode(output);
             }
             Union::Unset => output.write_byte(UNION_UNSET),
@@ -189,7 +189,7 @@ where
         }
         let tag = reader.read_tag()?;
         let expected_type = C::value_type();
-        let actual_type = tag.1;
+        let actual_type = tag.ty;
         if actual_type != expected_type {
             return Err(DecodeError::InvalidType {
                 expected: expected_type,
@@ -200,7 +200,7 @@ where
 
         Ok(Union::Set {
             key,
-            tag: tag.0,
+            tag: tag.tag,
             value,
         })
     }

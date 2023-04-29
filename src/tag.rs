@@ -1,12 +1,67 @@
 //! Implementation for [`Tag`]s and [`TdfType`]s
 
 use crate::error::DecodeError;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Write};
 
-/// Tag for a Tdf value. This contains the String tag for naming
-/// the field and then the type of the field
-#[derive(Debug, Eq, PartialEq)]
-pub struct Tag(pub String, pub TdfType);
+/// Represents the tag for a tagged value. Contains the
+/// tag itself and the type of value stored after
+pub struct Tagged {
+    /// The decoded tag
+    pub tag: Tag,
+    /// The Tdf type after this tag
+    pub ty: TdfType,
+}
+
+/// Decoded tag bytes type
+#[derive(Debug, PartialEq, Eq)]
+pub struct Tag(pub [u8; 4]);
+
+impl PartialEq<[u8]> for Tag {
+    fn eq(&self, other: &[u8]) -> bool {
+        let len = other.len();
+        for i in 0..4 {
+            let key_byte = self.0[i];
+
+            // Key length surpassed provided input
+            if i >= len && key_byte != 0 {
+                return false;
+            }
+
+            let input_byte = other[i];
+
+            // Input and key don't match
+            if key_byte != input_byte {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl From<&[u8]> for Tag {
+    fn from(value: &[u8]) -> Self {
+        let mut out = [0u8; 4];
+        for i in 0..value.len() {
+            out[i] = value[i];
+        }
+        Self(out)
+    }
+}
+
+/// Tags are stored as the raw input to avoid extra
+/// heap allocation so they must be converted to strings
+/// for displaying
+impl Display for Tag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in self.0 {
+            // Skip empty key bytes
+            if byte != 0 {
+                f.write_char(byte as char)?;
+            }
+        }
+        Ok(())
+    }
+}
 
 /// Types from the Blaze packet system which are used to describe
 /// what data needs to be decoded.

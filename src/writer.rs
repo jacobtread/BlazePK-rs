@@ -575,7 +575,7 @@ mod test {
         for value in u8::MIN..u8::MAX {
             writer.tag_u8(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: u8 = reader.tag("TEST").expect("Failed to decode tag u8 value");
+            let decoded: u8 = reader.tag(b"TEST").expect("Failed to decode tag u8 value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -590,7 +590,7 @@ mod test {
         for value in u16::MIN..u16::MAX {
             writer.tag_u16(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: u16 = reader.tag("TEST").expect("Failed to decode tag u16 value");
+            let decoded: u16 = reader.tag(b"TEST").expect("Failed to decode tag u16 value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -605,7 +605,7 @@ mod test {
         for value in (u32::MAX - 65535)..u32::MAX {
             writer.tag_u32(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: u32 = reader.tag("TEST").expect("Failed to decode tag u32 value");
+            let decoded: u32 = reader.tag(b"TEST").expect("Failed to decode tag u32 value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -620,7 +620,7 @@ mod test {
         for value in (u64::MAX - 65535)..u64::MAX {
             writer.tag_u64(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
-            let decoded: u64 = reader.tag("TEST").expect("Failed to decode tag u64 value");
+            let decoded: u64 = reader.tag(b"TEST").expect("Failed to decode tag u64 value");
             assert_eq!(value, decoded);
             writer.clear();
         }
@@ -636,7 +636,7 @@ mod test {
             writer.tag_usize(b"TEST", value);
             let mut reader = TdfReader::new(&writer.buffer);
             let decoded: usize = reader
-                .tag("TEST")
+                .tag(b"TEST")
                 .expect("Failed to decode tag usize value");
             assert_eq!(value, decoded);
             writer.clear();
@@ -682,7 +682,7 @@ mod test {
         assert_eq!(&writer.buffer[4 + length_bytes.len()..], TEXT_BYTES);
 
         let mut reader = TdfReader::new(&writer.buffer);
-        let value: String = reader.tag("TEST").unwrap();
+        let value: String = reader.tag(b"TEST").unwrap();
 
         assert_eq!(value, TEXT)
     }

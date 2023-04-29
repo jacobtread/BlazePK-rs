@@ -4,7 +4,7 @@
 use crate::{
     codec::{Decodable, ValueType},
     error::{DecodeError, DecodeResult},
-    tag::{Tag, TdfType},
+    tag::{Tag, Tagged, TdfType},
     types::{TdfMap, UNION_UNSET},
 };
 use std::borrow::Cow;
@@ -257,29 +257,27 @@ impl<'a> TdfReader<'a> {
     ///
     /// `tag` The tag name to read until
     /// `ty`  The expected type of the tag
-    pub fn until_tag(&mut self, tag: &str, ty: TdfType) -> DecodeResult<()> {
+    pub fn until_tag(&mut self, tag: &[u8], ty: TdfType) -> DecodeResult<()> {
+        let tag = Tag::from(tag);
         loop {
             let next_tag = match self.read_tag() {
                 Ok(value) => value,
                 Err(DecodeError::UnexpectedEof { .. }) => {
-                    return Err(DecodeError::MissingTag {
-                        tag: tag.to_string(),
-                        ty,
-                    })
+                    return Err(DecodeError::MissingTag { tag, ty })
                 }
                 Err(err) => return Err(err),
             };
 
-            if next_tag.0.ne(tag) {
-                self.skip_type(&next_tag.1)?;
+            if next_tag.tag != tag {
+                self.skip_type(&next_tag.ty)?;
                 continue;
             }
 
-            if next_tag.1.ne(&ty) {
+            if next_tag.ty.ne(&ty) {
                 return Err(DecodeError::InvalidTagType {
-                    tag: tag.to_string(),
+                    tag,
                     expected: ty,
-                    actual: next_tag.1,
+                    actual: next_tag.ty,
                 });
             }
 
@@ -293,19 +291,20 @@ impl<'a> TdfReader<'a> {
     ///
     /// `tag` The tag name to read until
     /// `ty`  The expected type of the tag
-    pub fn try_until_tag(&mut self, tag: &str, ty: TdfType) -> bool {
+    pub fn try_until_tag(&mut self, tag: &[u8], ty: TdfType) -> bool {
+        let tag = Tag::from(tag);
         let start = self.cursor;
 
         while let Ok(next_tag) = self.read_tag() {
-            if next_tag.0.ne(tag) {
-                if self.skip_type(&next_tag.1).is_err() {
+            if next_tag.tag != tag {
+                if self.skip_type(&next_tag.ty).is_err() {
                     break;
                 } else {
                     continue;
                 }
             }
 
-            if next_tag.1.ne(&ty) {
+            if next_tag.ty.ne(&ty) {
                 break;
             }
 
@@ -319,7 +318,7 @@ impl<'a> TdfReader<'a> {
     /// reaches the correct value.
     ///
     /// `tag` The tag name to read
-    pub fn tag<C: Decodable + ValueType>(&mut self, tag: &str) -> DecodeResult<C> {
+    pub fn tag<C: Decodable + ValueType>(&mut self, tag: &[u8]) -> DecodeResult<C> {
         self.until_tag(tag, C::value_type())?;
         C::decode(self)
     }
@@ -329,7 +328,7 @@ impl<'a> TdfReader<'a> {
     /// back to where it was
     ///
     /// `tag` The tag name to read
-    pub fn try_tag<C: Decodable + ValueType>(&mut self, tag: &str) -> DecodeResult<Option<C>> {
+    pub fn try_tag<C: Decodable + ValueType>(&mut self, tag: &[u8]) -> DecodeResult<Option<C>> {
         let start = self.cursor;
         match self.tag(tag) {
             Ok(value) => Ok(Some(value)),
@@ -348,9 +347,9 @@ impl<'a> TdfReader<'a> {
     }
 
     /// Reads a tag from the underlying buffer
-    pub fn read_tag(&mut self) -> DecodeResult<Tag> {
+    pub fn read_tag(&mut self) -> DecodeResult<Tagged> {
         let input: [u8; 4] = self.read_byte_4()?;
-        let value_type: TdfType = TdfType::try_from(input[3])?;
+        let ty: TdfType = TdfType::try_from(input[3])?;
         let mut output: [u8; 4] = [0, 0, 0, 0];
 
         output[0] |= (input[0] & 0x80) >> 1;
@@ -370,14 +369,9 @@ impl<'a> TdfReader<'a> {
         output[3] |= (input[2] & 0x20) << 1;
         output[3] |= input[2] & 0x1F;
 
-        let mut out = String::new();
-        for value in output {
-            match value {
-                0 => {}
-                value => out.push(char::from(value)),
-            }
-        }
-        Ok(Tag(out, value_type))
+        let tag = Tag(output);
+
+        Ok(Tagged { tag, ty })
     }
 
     /// Skips the 4 bytes required for a 32 bit float value
@@ -473,7 +467,7 @@ impl<'a> TdfReader<'a> {
     /// Skips the next tag value
     pub fn skip(&mut self) -> DecodeResult<()> {
         let tag = self.read_tag()?;
-        self.skip_type(&tag.1)
+        self.skip_type(&tag.ty)
     }
 
     /// Skips a data type
@@ -528,8 +522,8 @@ impl<'a> TdfReader<'a> {
     pub fn stringify_tag(&mut self, out: &mut String, indent: usize) -> DecodeResult<()> {
         let tag = self.read_tag()?;
         out.push_str(&"  ".repeat(indent));
-        out.push_str(&format!("\"{}\": ", &tag.0));
-        match self.stringify_type(out, indent, &tag.1) {
+        out.push_str(&format!("\"{}\": ", &tag.tag));
+        match self.stringify_type(out, indent, &tag.ty) {
             Ok(_) => {
                 out.push_str(",\n");
                 Ok(())
@@ -649,8 +643,8 @@ impl<'a> TdfReader<'a> {
                     out.push_str("Union(Unset)")
                 } else {
                     let tag = self.read_tag()?;
-                    out.push_str(&format!("Union(\"{}\", {}, ", &tag.0, ty));
-                    self.stringify_type(out, indent + 1, &tag.1)?;
+                    out.push_str(&format!("Union(\"{}\", {}, ", &tag.tag, ty));
+                    self.stringify_type(out, indent + 1, &tag.ty)?;
                     out.push(')')
                 }
             }
@@ -693,7 +687,7 @@ impl<'a> TdfReader<'a> {
     ///
     /// `tag`        The tag to read
     /// `value_type` The expected value type
-    pub fn until_list(&mut self, tag: &str, value_type: TdfType) -> DecodeResult<usize> {
+    pub fn until_list(&mut self, tag: &[u8], value_type: TdfType) -> DecodeResult<usize> {
         self.until_tag(tag, TdfType::List)?;
         let list_type = self.read_type()?;
         if list_type != value_type {
@@ -715,7 +709,7 @@ impl<'a> TdfReader<'a> {
     /// `value_type` The expected value type
     pub fn until_map(
         &mut self,
-        tag: &str,
+        tag: &[u8],
         key_type: TdfType,
         value_type: TdfType,
     ) -> DecodeResult<usize> {
