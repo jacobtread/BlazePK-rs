@@ -777,12 +777,35 @@ impl<C> Encodable for Vec<C>
 where
     C: Encodable + ValueType,
 {
-    fn encode(&self, output: &mut TdfWriter) {
-        output.write_type(C::value_type());
-        output.write_usize(self.len());
+    fn encode(&self, writer: &mut TdfWriter) {
+        writer.write_type(C::value_type());
+        writer.write_usize(self.len());
         for value in self {
-            value.encode(output);
+            value.encode(writer);
         }
+    }
+}
+
+/// Support for encoding slices of encodable items as lists
+impl<'a, C> Encodable for &'a [C]
+where
+    C: Encodable + ValueType,
+{
+    fn encode(&self, writer: &mut TdfWriter) {
+        writer.write_type(C::value_type());
+        writer.write_usize(self.len());
+        for value in self.iter() {
+            value.encode(writer);
+        }
+    }
+}
+
+impl<'a, C> ValueType for &'a [C]
+where
+    C: Encodable + ValueType,
+{
+    fn value_type() -> TdfType {
+        TdfType::List
     }
 }
 
