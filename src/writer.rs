@@ -282,6 +282,13 @@ impl TdfWriter {
         self.buffer.push(0);
     }
 
+    /// Slices are already borrowed so they confuse the `tag_value` type using this
+    /// function instead makes them work
+    pub fn tag_slice_list<C: Encodable + ValueType>(&mut self, tag: &[u8], value: &[C]) {
+        self.tag(tag, TdfType::List);
+        value.encode(self);
+    }
+
     /// Writes a tag for indiciating a var int list with no contents
     ///
     /// `tag` The tag to write

@@ -47,6 +47,11 @@ impl From<&[u8]> for Tag {
         Self(out)
     }
 }
+impl From<&[u8; 4]> for Tag {
+    fn from(value: &[u8; 4]) -> Self {
+        Self(*value)
+    }
+}
 
 /// Tags are stored as the raw input to avoid extra
 /// heap allocation so they must be converted to strings

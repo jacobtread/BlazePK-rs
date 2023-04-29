@@ -787,7 +787,7 @@ where
 }
 
 /// Support for encoding slices of encodable items as lists
-impl<'a, C> Encodable for &'a [C]
+impl<C> Encodable for &[C]
 where
     C: Encodable + ValueType,
 {
@@ -800,7 +800,7 @@ where
     }
 }
 
-impl<'a, C> ValueType for &'a [C]
+impl<C> ValueType for &[C]
 where
     C: Encodable + ValueType,
 {
