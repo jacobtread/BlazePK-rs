@@ -57,13 +57,13 @@ type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// `Format` The format of the handler function (FormatA, FormatB)
 /// `Req`    The request value type for the handler
 /// `Res`    The response type for the handler
-pub trait Handler<'a, State, Format, Req, Res>: Clone + Send + Sync + 'static {
+pub trait Handler<'a, State, Format, Req, Res>: Send + Sync + 'static {
     /// Handle function for calling the underlying handle logic using
     /// the proivded state and packet
     ///
     /// `state`  The state to provide
     /// `packet` The packet to handle
-    fn handle(self, state: &'a mut State, req: Req) -> BoxFuture<'a, Res>;
+    fn handle(&self, state: &'a mut State, req: Req) -> BoxFuture<'a, Res>;
 }
 
 /// Future which results in a response packet being produced that can
@@ -82,15 +82,15 @@ type PacketFuture<'a> = BoxFuture<'a, Packet>;
 ///     Res {}
 /// }
 /// ```
-impl<'a, State, Fn, Fut, Req, Res> Handler<'a, State, FormatA, Req, Res> for Fn
+impl<'a, State, Fun, Fut, Req, Res> Handler<'a, State, FormatA, Req, Res> for Fun
 where
-    Fn: FnOnce(&'a mut State, Req) -> Fut + Clone + Send + Sync + 'static,
+    Fun: Fn(&'a mut State, Req) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
     Req: FromRequest,
     Res: IntoResponse,
     State: Send + 'static,
 {
-    fn handle(self, state: &'a mut State, req: Req) -> BoxFuture<'a, Res> {
+    fn handle(&self, state: &'a mut State, req: Req) -> BoxFuture<'a, Res> {
         Box::pin(self(state, req))
     }
 }
@@ -106,15 +106,15 @@ where
 ///     Res {}
 /// }
 /// ```
-impl<State, Fn, Fut, Req, Res> Handler<'_, State, FormatB, Req, Res> for Fn
+impl<State, Fun, Fut, Req, Res> Handler<'_, State, FormatB, Req, Res> for Fun
 where
-    Fn: FnOnce(Req) -> Fut + Clone + Send + Sync + 'static,
+    Fun: Fn(Req) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Req: FromRequest,
     Res: IntoResponse,
     State: Send + 'static,
 {
-    fn handle(self, _state: &mut State, req: Req) -> BoxFuture<'static, Res> {
+    fn handle(&self, _state: &mut State, req: Req) -> BoxFuture<'static, Res> {
         Box::pin(self(req))
     }
 }
@@ -130,14 +130,14 @@ where
 ///     Res {}
 /// }
 /// ```
-impl<'a, State, Fn, Fut, Res> Handler<'a, State, FormatA, (), Res> for Fn
+impl<'a, State, Fun, Fut, Res> Handler<'a, State, FormatA, (), Res> for Fun
 where
-    Fn: FnOnce(&'a mut State) -> Fut + Clone + Send + Sync + 'static,
+    Fun: Fn(&'a mut State) -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'a,
     Res: IntoResponse,
     State: Send + 'static,
 {
-    fn handle(self, state: &'a mut State, _: ()) -> BoxFuture<'a, Res> {
+    fn handle(&self, state: &'a mut State, _: ()) -> BoxFuture<'a, Res> {
         Box::pin(self(state))
     }
 }
@@ -151,14 +151,14 @@ where
 ///     Res {}
 /// }
 /// ```
-impl<State, Fn, Fut, Res> Handler<'_, State, FormatB, (), Res> for Fn
+impl<State, Fun, Fut, Res> Handler<'_, State, FormatB, (), Res> for Fun
 where
-    Fn: FnOnce() -> Fut + Clone + Send + Sync + 'static,
+    Fun: Fn() -> Fut + Send + Sync + 'static,
     Fut: Future<Output = Res> + Send + 'static,
     Res: IntoResponse,
     State: Send + 'static,
 {
-    fn handle(self, _state: &mut State, _: ()) -> BoxFuture<'static, Res> {
+    fn handle(&self, _state: &mut State, _: ()) -> BoxFuture<'static, Res> {
         Box::pin(self())
     }
 }
@@ -200,14 +200,8 @@ trait Route<S>: Send + Sync {
     ///
     /// `state`  The state provided
     /// `packet` The packet to handle with the route
-    fn handle(
-        self: Box<Self>,
-        state: &mut S,
-        packet: Packet,
-    ) -> Result<PacketFuture<'_>, HandleError>;
-
-    /// Cloning implementation to clone self
-    fn boxed_clone(&self) -> Box<dyn Route<S>>;
+    fn handle<'s>(&self, state: &'s mut S, packet: Packet)
+        -> Result<PacketFuture<'s>, HandleError>;
 }
 
 /// Route wrapper over a handler for storing the phantom type data
@@ -228,24 +222,17 @@ where
     Format: 'static,
     State: Send + 'static,
 {
-    fn handle(
-        self: Box<Self>,
-        state: &mut State,
+    fn handle<'s>(
+        &self,
+        state: &'s mut State,
         packet: Packet,
-    ) -> Result<PacketFuture<'_>, HandleError> {
+    ) -> Result<PacketFuture<'s>, HandleError> {
         let req = match Req::from_request(&packet) {
             Ok(value) => value,
             Err(err) => return Err(HandleError::Decoding(err)),
         };
         let fut = self.handler.handle(state, req);
         Ok(Box::pin(HandlerFuture { fut, packet }))
-    }
-
-    fn boxed_clone(&self) -> Box<dyn Route<State>> {
-        Box::new(HandlerRoute {
-            handler: self.handler.clone(),
-            _marker: PhantomData,
-        })
     }
 }
 
@@ -313,10 +300,12 @@ where
             Some(value) => value,
             None => return Err(HandleError::MissingHandler(packet)),
         };
+
         let route = match self.routes.get(&target) {
-            Some(value) => value.boxed_clone(),
+            Some(value) => value,
             None => return Err(HandleError::MissingHandler(packet)),
         };
+
         route.handle(state, packet)
     }
 }
