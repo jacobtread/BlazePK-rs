@@ -16,37 +16,18 @@ pub struct Tagged {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Tag(pub [u8; 4]);
 
-impl PartialEq<[u8]> for Tag {
-    fn eq(&self, other: &[u8]) -> bool {
-        let len = other.len();
-        for i in 0..4 {
-            let key_byte = self.0[i];
-
-            // Key length surpassed provided input
-            if i >= len && key_byte != 0 {
-                return false;
-            }
-
-            let input_byte = other[i];
-
-            // Input and key don't match
-            if key_byte != input_byte {
-                return false;
-            }
-        }
-        true
-    }
-}
-
 impl From<&[u8]> for Tag {
     fn from(value: &[u8]) -> Self {
         let mut out = [0u8; 4];
-        for i in 0..value.len() {
-            out[i] = value[i];
-        }
+
+        // Only copy the max of 4 bytes
+        let len = value.len().min(4);
+        out[0..len].copy_from_slice(value);
+
         Self(out)
     }
 }
+
 impl From<&[u8; 4]> for Tag {
     fn from(value: &[u8; 4]) -> Self {
         Self(*value)
