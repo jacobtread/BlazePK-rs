@@ -519,7 +519,7 @@ mod test {
     fn test_write_slice() {
         const SLICE: &[u8] = &[0, 125, 21, 1, 3, 15, 50, 30];
         let mut writer = TdfWriter::default();
-        writer.write_slice(&SLICE);
+        writer.write_slice(SLICE);
         assert_eq!(&writer.buffer, SLICE)
     }
 
