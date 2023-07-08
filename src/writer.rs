@@ -311,6 +311,22 @@ impl TdfWriter {
         self.write_usize(length);
     }
 
+    /// Writes a list of tuples as a map of key value paris
+    ///
+    /// `tag`    The tag to write
+    /// `values` The tuples of key value pairs to write
+    pub fn tag_map_tuples<K, V>(&mut self, tag: &[u8], values: &[(K, V)])
+    where
+        K: Encodable + ValueType,
+        V: Encodable + ValueType,
+    {
+        self.tag_map_start(tag, K::value_type(), V::value_type(), values.len());
+        for (key, value) in values {
+            key.encode(self);
+            value.encode(self);
+        }
+    }
+
     /// Writes a tag with a pair of values
     ///
     /// `tag`   The tag to write
