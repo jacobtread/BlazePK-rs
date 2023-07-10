@@ -531,6 +531,19 @@ impl<'a, K, V> IntoIterator for &'a TdfMap<K, V> {
     }
 }
 
+impl<K, V, B: Into<K>, A: Into<V>> FromIterator<(B, A)> for TdfMap<K, V> {
+    fn from_iter<T: IntoIterator<Item = (B, A)>>(iter: T) -> Self {
+        let entries: Vec<MapEntry<K, V>> = iter
+            .into_iter()
+            .map(|(key, value)| MapEntry {
+                key: key.into(),
+                value: value.into(),
+            })
+            .collect();
+        Self { entries }
+    }
+}
+
 impl<K, V> Encodable for TdfMap<K, V>
 where
     K: Encodable + ValueType,
