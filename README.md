@@ -7,6 +7,9 @@
 Rust library for working with the Blaze packet system this is the networking solution used by games such as
 Mass Effect 3, Battlefield 3, another Other EA games. 
 
+## Deprecation notice
+This library has been deprecated in favor of my new https://github.com/jacobtread/tdf library. 
+
 ## Crate Features
 - default *Default features are serde*
 - serde *Provides serialize implementations for the types*
